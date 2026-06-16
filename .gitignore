@@ -1,0 +1,16 @@
+# Env / secrets — .env.example (the committed key list) is the one exception
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Claude Code machine-local settings
+.claude/settings.local.json

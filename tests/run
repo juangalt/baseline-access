@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Test runner — uses system bats if available, else the vendored copy.
+# Usage: tests/run [bats args…]   (defaults to the full unit + integration suite)
+set -euo pipefail
+
+TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if command -v bats &>/dev/null; then
+  BATS=bats
+else
+  BATS="$TESTS_DIR/bats.d/bats-core/bin/bats"
+  if [[ ! -x "$BATS" ]]; then
+    echo "bats not found — expected vendored copy at $BATS" >&2
+    exit 1
+  fi
+fi
+
+if [[ $# -eq 0 ]]; then
+  exec "$BATS" "$TESTS_DIR/unit" "$TESTS_DIR/integration"
+fi
+exec "$BATS" "$@"
