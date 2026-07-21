@@ -1,7 +1,8 @@
-# baseline-github
+# baseline-access
 
 **Category: baseline** — the public first-boot rung that makes any brand-new
 machine git-ready, per `meta-ai-dev/decisions/0003-repo-taxonomy-by-type.md`.
+Renamed from `baseline-github` at `v0.2.0` (baseline decomposition, Phase 1).
 
 This repo is **PUBLIC**. Only bootstrap *logic* lives here so a credential-less
 machine can clone it over HTTPS and read every byte before running it. No secret
@@ -19,7 +20,7 @@ history is forever and the world can read it.
 
 ## What this repo is
 
-`baseline-github` is the zero-credential entry point that breaks the first-boot
+`baseline-access` is the zero-credential entry point that breaks the first-boot
 chicken-and-egg: a fresh machine can't clone the *private* repos that hold its
 provisioning code until it has the GitHub SSH key, but that key lives behind
 Bitwarden. This public repo is the one thing a credential-less machine can
@@ -42,7 +43,7 @@ workspace context, and the script references nothing outside the repo and `$HOME
 
 | Path | Role |
 |---|---|
-| `baseline-github.sh` | the only executable — the first-boot provisioner |
+| `baseline-access.sh` | the only executable — the first-boot provisioner |
 | `README.md` | copy-pasteable first-boot recipe (clone-then-run + pinned curl) |
 | `tests/` | bats suite (unit + integration); `tests/run` wrapper |
 | `decisions/` | ADRs — the durable *why* |
@@ -50,9 +51,9 @@ workspace context, and the script references nothing outside the repo and `$HOME
 ## CLI
 
 ```bash
-./baseline-github.sh                # provision (default): the whole git-ready flow
-./baseline-github.sh provision      # explicit; same as the default
-./baseline-github.sh help           # usage
+./baseline-access.sh                # provision (default): the whole git-ready flow
+./baseline-access.sh provision      # explicit; same as the default
+./baseline-access.sh help           # usage
 ```
 
 `provision` runs: Bitwarden login → save GitHub key → SSH config + known_hosts →
@@ -91,12 +92,15 @@ repo — they are supplied at runtime.
 
 | Step | Item name | JSON path |
 |---|---|---|
-| save GitHub key | `ssh-access service key: github` | `.sshKey.privateKey` |
+| save GitHub key | `fleet-policy:keys/service/github` | `.sshKey.privateKey` |
 
-The item name is reused verbatim from `baseline-bluefin` (the two are the laptop
-first-boot path and must agree). Reconciling this name with the fleet skill's
-`fleet-policy:keys/service/github` — if they point at the same key material — is a
-separate concern, not this repo's job.
+Standardized on the fleet skill's reference name — the two names
+(`fleet-policy:keys/service/github` and the legacy `ssh-access service key:
+github` that `baseline-bluefin` used) were fingerprint-verified as the **same
+key** on 2026-07-20, and fleet's schema requires the `fleet-policy:` prefix, so
+it is the name that wins. The legacy item is **retained** until the migration
+tombstone so `baseline-bluefin` and the pinned `v0.1.0` one-liner keep resolving;
+see `baseline-setup` ADR 0004 D3.
 
 ## Testing
 

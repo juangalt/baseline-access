@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
-# Integration tests — drive baseline-github.sh end to end with every external
+# Integration tests — drive baseline-access.sh end to end with every external
 # tool mocked. Covers the full git-ready provision flow (AC3–AC7) and the CLI.
 
-BOOTSTRAP="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)/baseline-github.sh"
+BOOTSTRAP="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)/baseline-access.sh"
 
 setup() {
   load '../helpers/common'
@@ -18,7 +18,7 @@ setup() {
   assert_success
   assert_output --partial "first-boot provisioner"
   assert_output --partial "provision"
-  assert_output --partial "ssh-access service key:"
+  assert_output --partial "fleet-policy:keys/service/github"
 }
 
 @test "--help: shows usage text" {

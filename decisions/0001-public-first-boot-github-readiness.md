@@ -4,6 +4,14 @@
 - **Date:** 2026-06-16 (created from `meta-ai-dev` plan `plans/baseline-github.md`,
   backlog item B-26; forks resolved 2026-06-14)
 
+> **Provenance (2026-07-21, baseline decomposition Phase 1).** This repo was created
+> as `baseline-github` and is now **`baseline-access`** (`v0.2.0`). The
+> `bitwarden-item` fork below is **resolved**: the two names were fingerprint-verified
+> as the same key and the script standardized on `fleet-policy:keys/service/github`;
+> the legacy `ssh-access service key: github` item is retained until the migration
+> tombstone. See `baseline-setup` ADR 0004 D3. The dated decision text below is left
+> as the original historical record.
+
 ## Context
 
 When `baseline-bluefin` (the merged laptop bootstrap) went **private**, a fresh

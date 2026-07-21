@@ -1,4 +1,4 @@
-# baseline-github
+# baseline-access
 
 The **public** first-boot entry point that makes any brand-new machine
 **git-ready** with zero prior credentials. It fetches the GitHub SSH key from
@@ -14,9 +14,9 @@ A fresh machine can clone this public repo over **HTTPS with no key**, and you c
 read the whole script before running it:
 
 ```bash
-git clone https://github.com/juangalt/baseline-github.git ~/baseline-github
-cd ~/baseline-github
-./baseline-github.sh            # Bitwarden login → GitHub key → SSH config +
+git clone https://github.com/juangalt/baseline-access.git ~/baseline-access
+cd ~/baseline-access
+./baseline-access.sh            # Bitwarden login → GitHub key → SSH config +
                                 # known_hosts → git identity → verify → next step
 ```
 
@@ -25,7 +25,7 @@ already set, your git identity. To avoid the identity prompt:
 
 ```bash
 GIT_IDENTITY_NAME="Your Name" GIT_IDENTITY_EMAIL="you@example.com" \
-  ./baseline-github.sh
+  ./baseline-access.sh
 ```
 
 When it finishes, the machine is git-ready — proceed to your machine-class
@@ -37,12 +37,16 @@ For the impatient. The raw URL is **pinned to a release tag** (not `main`) so th
 bytes piped into your shell are reviewable and stable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-github/v0.1.0/baseline-github.sh | bash
+curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-access/v0.2.0/baseline-access.sh | bash
 ```
 
 Prefer clone-then-run when you can — piping remote code into a shell runs it
 unread. The pinned tag exists precisely so you *can* read it first:
-<https://github.com/juangalt/baseline-github/blob/v0.1.0/baseline-github.sh>.
+<https://github.com/juangalt/baseline-access/blob/v0.2.0/baseline-access.sh>.
+
+> The pre-rename `v0.1.0` one-liner (`.../baseline-github/v0.1.0/baseline-github.sh`)
+> still resolves via GitHub's rename redirect and the retained Bitwarden item, so
+> machines pinned to it keep working until the migration tombstone.
 
 ## What it does
 
