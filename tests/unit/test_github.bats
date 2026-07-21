@@ -99,7 +99,7 @@ setup() {
   export BW_SESSION="fake"
   run save_github_key
   assert_success
-  grep -q "get item ssh-access service key: github" "$BATS_TEST_TMPDIR/bw.calls"
+  grep -q "get item fleet-policy:keys/service/github" "$BATS_TEST_TMPDIR/bw.calls"
 }
 
 @test "save_github_key: does not load any key into ssh-agent" {

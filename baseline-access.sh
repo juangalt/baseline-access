@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# baseline-github.sh — first-boot provisioner that makes any machine git-ready.
+# baseline-access.sh — first-boot provisioner that makes any machine git-ready.
 #
 # Zero-credential entry point: from a brand-new machine, clone this PUBLIC repo
 # (HTTPS, no key needed), run it, authenticate to Bitwarden interactively, and
@@ -10,8 +10,8 @@
 # This repo is PUBLIC: only bootstrap *logic* lives here. Every secret value stays
 # in Bitwarden and renders at runtime; nothing secret is ever committed.
 #
-# Usage: baseline-github.sh [provision]   (provision is the default)
-# Run:   baseline-github.sh help
+# Usage: baseline-access.sh [provision]   (provision is the default)
+# Run:   baseline-access.sh help
 #
 # Scope: this makes the machine git-ready and NOTHING more. It does not clone or
 # run any machine-class bootstrap, does not touch dotfiles/packages/dconf beyond
@@ -42,13 +42,14 @@ require() {
 }
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-# Bitwarden item carrying the GitHub service key. Reused verbatim from
-# baseline-bluefin's `install github-key` — the two are the laptop first-boot
-# path and MUST agree on the item name. They keep INDEPENDENT copies of the
-# fetch logic (no cross-repo code coupling); a change to either must be mirrored
-# deliberately. (Item-name reconciliation with the fleet skill's
-# `fleet-policy:keys/service/github` is a separate concern, not this repo's job.)
-GITHUB_BW_ITEM="ssh-access service key: github"
+# Bitwarden item carrying the GitHub service key. Standardized on the fleet
+# skill's reference name `fleet-policy:keys/service/github` — the same key
+# material (fingerprint-verified 2026-07-20) that baseline-bluefin's
+# `install github-key` fetched under the legacy name `ssh-access service key:
+# github`. Fleet's schema requires the `fleet-policy:` prefix, so this is the
+# name that wins. The legacy item is retained until the migration tombstone so
+# the pinned v0.1.0 one-liner keeps resolving; see baseline-setup ADR 0004 D3.
+GITHUB_BW_ITEM="fleet-policy:keys/service/github"
 GITHUB_BW_FIELD='.sshKey.privateKey'
 GITHUB_KEY_FILE="$HOME/.ssh/github"
 
@@ -264,16 +265,17 @@ cmd_provision() {
 usage() {
   cat <<'EOF'
 
-baseline-github — first-boot provisioner to make any machine git-ready
+baseline-access — first-boot provisioner to make any machine git-ready
 
 Usage:
-  baseline-github.sh [provision]   Bitwarden login → GitHub key → SSH config +
+  baseline-access.sh [provision]   Bitwarden login → GitHub key → SSH config +
                                    known_hosts → git identity → verify → next step
-  baseline-github.sh help          Show this help
+  baseline-access.sh help          Show this help
 
-Provisions ONLY the GitHub service key (Bitwarden item: "ssh-access service key:
-github"). Interactive Bitwarden auth only. Git identity is taken from
-GIT_IDENTITY_NAME / GIT_IDENTITY_EMAIL when set, else prompted.
+Provisions ONLY the GitHub service key (Bitwarden item:
+"fleet-policy:keys/service/github"). Interactive Bitwarden auth only. Git
+identity is taken from GIT_IDENTITY_NAME / GIT_IDENTITY_EMAIL when set, else
+prompted.
 EOF
 }
 

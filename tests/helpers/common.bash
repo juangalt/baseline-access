@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Common setup helpers for the baseline-github.sh test suite.
+# Common setup helpers for the baseline-access.sh test suite.
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BOOTSTRAP="$TESTS_DIR/../baseline-github.sh"
+BOOTSTRAP="$TESTS_DIR/../baseline-access.sh"
 
 # Load bats-support and bats-assert from the vendored copies.
 load "$TESTS_DIR/bats.d/bats-support/load"
 load "$TESTS_DIR/bats.d/bats-assert/load"
 
-# Source baseline-github.sh with main() stubbed so individual functions can be
+# Source baseline-access.sh with main() stubbed so individual functions can be
 # called directly. Relies on `main "$@"` being the last line of the script.
 load_bootstrap_functions() {
   # shellcheck disable=SC1090
