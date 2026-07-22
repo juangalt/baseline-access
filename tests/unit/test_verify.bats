@@ -38,6 +38,7 @@ setup() {
   run print_next_step
   assert_success
   assert_output --partial "git-ready"
-  assert_output --partial "baseline-bluefin"
+  assert_output --partial "most machines: baseline-setup"
+  assert_output --partial "still baseline-bluefin"
   assert_output --partial "fleet bootstrap"
 }

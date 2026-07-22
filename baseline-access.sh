@@ -245,7 +245,8 @@ verify_github_auth() {
 print_next_step() {
   header "Machine is git-ready"
   info "Next step: run your machine-class bootstrap with GitHub already wired —"
-  dim "laptops: baseline-bluefin   ·   control nodes: the fleet bootstrap"
+  dim "most machines: baseline-setup   ·   control nodes: the fleet bootstrap"
+  dim "(Bluefin laptop: still baseline-bluefin for now)"
 }
 
 # ── Commands ──────────────────────────────────────────────────────────────────
