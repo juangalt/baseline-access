@@ -7,6 +7,13 @@
 # the github.com SSH config + known_hosts wired, and the git identity configured —
 # so the machine can immediately clone private repos and run git.
 #
+# ACCESS IS SSH-ONLY. What this provisions is an SSH key, so private repos clone
+# over git@github.com: URLs and nothing else. No credential.helper, no PAT, no
+# `gh auth login`, no url.*.insteadOf rewrite. An https:// clone of a private repo
+# failing afterwards is a wrong-URL symptom, not a failed provision. The single
+# deliberate HTTPS use is cloning this public repo on a keyless first boot — the
+# chicken-and-egg this script exists to break.
+#
 # This repo is PUBLIC: only bootstrap *logic* lives here. Every secret value stays
 # in Bitwarden and renders at runtime; nothing secret is ever committed.
 #
@@ -208,6 +215,15 @@ configure_git_identity() {
   local name="${GIT_IDENTITY_NAME:-$cur_name}"
   local email="${GIT_IDENTITY_EMAIL:-$cur_email}"
 
+  # Only hint when we are actually about to prompt (the unattended path is silent).
+  if [[ -z "$name" || -z "$email" ]]; then
+    info "Recommended: your GitHub username, and your GitHub noreply email."
+    dim "e.g.  user.name: octocat  ·  user.email: octocat@users.noreply.github.com"
+    dim "The noreply address keeps your real email out of public commit history,"
+    dim "and GitHub still attributes the commits to your account."
+    dim "Find yours under GitHub → Settings → Emails."
+  fi
+
   if [[ -z "$name" ]]; then
     read -rp "  git user.name: " name
   fi
@@ -244,6 +260,9 @@ verify_github_auth() {
 
 print_next_step() {
   header "Machine is git-ready"
+  info "Clone private repos over SSH — this machine has an SSH key, not HTTPS creds:"
+  dim "git clone git@github.com:<owner>/<repo>.git"
+  dim "https:// URLs will NOT work here — no credential helper or PAT is configured."
   info "Next step: run your machine-class bootstrap with GitHub already wired —"
   dim "most machines: baseline-setup   ·   control nodes: the fleet bootstrap"
   dim "(Bluefin laptop: still baseline-bluefin for now)"
@@ -276,7 +295,11 @@ Usage:
 Provisions ONLY the GitHub service key (Bitwarden item:
 "fleet-policy:keys/service/github"). Interactive Bitwarden auth only. Git
 identity is taken from GIT_IDENTITY_NAME / GIT_IDENTITY_EMAIL when set, else
-prompted.
+prompted; recommended values are your GitHub username and your GitHub noreply
+address (<username>@users.noreply.github.com).
+
+Access is SSH-only: afterwards, clone private repos with git@github.com: URLs.
+No HTTPS credentials (credential helper, PAT, gh login) are configured.
 EOF
 }
 
