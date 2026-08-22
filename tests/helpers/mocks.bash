@@ -65,7 +65,17 @@ mock_bw_get_fail() {
 # Write a jq mock that echoes a fixed value.
 # Usage: mock_jq_value VALUE
 mock_jq_value() {
-  printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' "$1" > "$MOCK_BIN/jq"
+  # Drains stdin first: real jq consumes its input, and a mock that exits without
+  # reading closes the pipe under a still-writing `bw`, which takes SIGPIPE. With
+  # `set -o pipefail` in the script under test that fails the whole pipeline, so
+  # not draining here makes tests fail nondeterministically on timing alone.
+  # The drain is a bash builtin loop, not `cat`: only_mocks_on_path strips PATH
+  # down to MOCK_BIN, where no external tool exists.
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'while IFS= read -r _; do :; done\n'
+    printf 'printf "%%s\\n" %q\n' "$1"
+  } > "$MOCK_BIN/jq"
   chmod +x "$MOCK_BIN/jq"
 }
 
@@ -75,6 +85,7 @@ mock_jq_value() {
 mock_jq_dispatch() {
   {
     printf '#!/usr/bin/env bash\n'
+    printf 'while IFS= read -r _; do :; done\n'
     printf 'FILTER="${@: -1}"\n'
     printf 'case "$FILTER" in\n'
     for mapping in "$@"; do

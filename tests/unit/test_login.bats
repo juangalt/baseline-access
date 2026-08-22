@@ -165,3 +165,26 @@ setup() {
   assert_failure
   assert_output --partial "bw login failed"
 }
+
+@test "bw_login_or_unlock: a printing-but-failing status pipeline yields a clean sentinel" {
+  # Regression guard for the `|| echo "error"` fallback living INSIDE the command
+  # substitution. When the pipeline both PRINTED and FAILED, the fallback appended
+  # to the output instead of replacing it, so $bw_st became two lines
+  # ($'unauthenticated\nerror'), matched no case branch, and died with a mangled
+  # multi-line "Unexpected bw status". `bw` printing a valid status and then
+  # exiting non-zero reproduces that shape deterministically (set -o pipefail
+  # makes the whole pipeline fail); this is also what a SIGPIPE'd `bw` looks like.
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf %s "{\\"status\\":\\"unauthenticated\\"}"\n'
+    printf 'exit 1\n'
+  } > "$MOCK_BIN/bw"
+  chmod +x "$MOCK_BIN/bw"
+  mock_jq_value "unauthenticated"
+  run bw_login_or_unlock
+  assert_failure
+  # The sentinel REPLACES the value rather than being appended to it.
+  assert_output --partial "Unexpected bw status: error"
+  # No leaked partial pipeline output, and no multi-line status.
+  refute_output --partial "unauthenticated"
+}

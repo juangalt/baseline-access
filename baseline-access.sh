@@ -99,8 +99,15 @@ bw_login_or_unlock() {
   have bw || install_bw
   require jq
 
+  # The `||` fallback MUST stay OUTSIDE the command substitution. Inside it, a
+  # failing pipeline appends "error" to whatever the pipeline already printed,
+  # yielding a multi-line $bw_st (e.g. $'unauthenticated\nerror') that matches no
+  # case branch below and dies with a mangled "Unexpected bw status". Outside, a
+  # failure cleanly *replaces* the value with the sentinel. `set -o pipefail` is
+  # in force, so any stage failing (including SIGPIPE from a reader that exits
+  # early) fails the whole pipeline.
   local bw_st
-  bw_st=$(bw status 2>/dev/null | jq -r '.status // "unknown"' || echo "error")
+  bw_st=$(bw status 2>/dev/null | jq -r '.status // "unknown"') || bw_st="error"
 
   if [[ -n "${BW_SESSION:-}" && ( "$bw_st" == "authenticated" || "$bw_st" == "unlocked" ) ]]; then
     ok "Vault already unlocked (BW_SESSION set)"
