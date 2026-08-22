@@ -31,6 +31,8 @@ always clone. After Bitwarden auth it makes the machine **git-ready**:
 3. configures the global git identity (`user.name` / `user.email`),
 4. verifies `ssh -T git@github.com`, then points at the next bootstrap.
 
+Access is provisioned over **SSH only** — see the SSH-only constraint below.
+
 It does this and **nothing more** (see Scope). The machine then proceeds to its
 machine-class bootstrap — `baseline-bluefin` for laptops, the fleet flow for
 control nodes — with GitHub already wired.
@@ -66,6 +68,15 @@ git identity → verify → next-step.
   reaches *other* hosts and belongs to the fleet flow.
 - **GitHub key is written to disk** at `~/.ssh/github`, mode 600 (`umask 077`).
   No key is ever loaded into ssh-agent here.
+- **SSH only — never HTTPS.** The provisioned credential is an SSH key, so the
+  machine is git-ready over `git@github.com:` URLs and nothing else. No
+  `credential.helper`, no PAT, no `gh auth login`, and deliberately no
+  `url.*.insteadOf` rewrite (global URL rewriting exceeds this rung's scope; the
+  README documents it as an opt-in the operator may set themselves). The one
+  intentional HTTPS use is cloning *this public repo* on a keyless first boot —
+  that is the chicken-and-egg this rung exists to break, and switching it to SSH
+  would make the repo unrunnable on a fresh machine. A failed HTTPS clone of a
+  private repo is a wrong-URL symptom, not a failed provision.
 - **Interactive Bitwarden auth only** (`bw login` / `bw unlock`). API-key /
   unattended auth (`BW_CLIENTID`/`BW_CLIENTSECRET`) is a documented future
   extension, not implemented in this cut.
@@ -87,6 +98,20 @@ Values come from `GIT_IDENTITY_NAME` / `GIT_IDENTITY_EMAIL` when set (the
 unattended path), else the operator is prompted. An already-configured identity
 is left untouched. Personal identity values are **not** committed to this public
 repo — they are supplied at runtime.
+
+Recommended convention (what the prompt hints at, and what this fleet uses):
+
+| Setting | Value | Example |
+|---|---|---|
+| `user.name` | the GitHub **username** | `juangalt` |
+| `user.email` | the GitHub **noreply** address | `juangalt@users.noreply.github.com` |
+
+The noreply address keeps a personal email out of commit history — load-bearing
+here because commits land in public repos and history is forever — while GitHub
+still attributes the commit. Using the username as `user.name` keeps authorship
+aligned with the account that owns the key this script installs. Newer GitHub
+accounts are issued the `<ID>+<username>@users.noreply.github.com` form; either
+works provided it matches an address on the account.
 
 ## Bitwarden items
 
