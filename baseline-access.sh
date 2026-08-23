@@ -138,18 +138,18 @@ bw_login_or_unlock() {
 
 # ── GitHub key ────────────────────────────────────────────────────────────────
 
-# True when resolved SSH config already maps github.com (or a `github` alias) to
-# an IdentityFile whose path contains "github". Uses `ssh -G` so Include
-# directives, Host aliases, and wildcards are all honoured.
+# True when resolved SSH config already maps the LITERAL github.com host to an
+# IdentityFile whose path contains "github". Uses `ssh -G` so Include
+# directives and wildcards are honoured. Deliberately does NOT also check a
+# `github` alias: this script's own contract (CLAUDE.md "SSH only") is that
+# plain `git@github.com:` URLs work without relying on any alias or git-level
+# URL rewrite another tool might layer on top. Something else provisioning a
+# `github` alias (e.g. a fleet-control insteadOf rewrite) does not mean the
+# literal host is covered, and treating it as equivalent left `github.com`
+# unrouted while this function reported false coverage.
 ssh_config_has_github() {
   have ssh || return 1
-  local host
-  for host in github.com github; do
-    if ssh -G "$host" 2>/dev/null | grep -qi '^identityfile.*github'; then
-      return 0
-    fi
-  done
-  return 1
+  ssh -G github.com 2>/dev/null | grep -qi '^identityfile.*github'
 }
 
 save_github_key() {

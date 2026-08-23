@@ -103,15 +103,20 @@ mock_jq_dispatch() {
 #   MODE (github config presence, drives `ssh -G`):
 #     direct — github.com → IdentityFile ~/.ssh/github
 #     none   — no github-specific config (only default keys)
+#     alias  — a `github` alias (NOT github.com) resolves to a github-named
+#              key (e.g. ~/.ssh/svc-github); github.com itself stays
+#              unrouted. Simulates another tool (fleet-control) provisioning
+#              an alias without covering the literal host.
 #   VERIFY_BANNER (drives `ssh -T`, optional):
 #     authed   — emit the "successfully authenticated" banner (default)
 #     denied   — emit a permission-denied banner
 mock_ssh() {
   local mode="${1:-none}" verify="${2:-authed}"
-  local id_github_com
+  local id_github_com id_github_alias
   case "$mode" in
-    direct) id_github_com="~/.ssh/github" ;;
-    none)   id_github_com="~/.ssh/id_rsa" ;;
+    direct) id_github_com="~/.ssh/github";  id_github_alias="~/.ssh/id_rsa" ;;
+    none)   id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/id_rsa" ;;
+    alias)  id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/svc-github" ;;
     *) printf 'mock_ssh: unknown mode %s\n' "$mode" >&2; return 1 ;;
   esac
   local banner
@@ -125,6 +130,7 @@ mock_ssh() {
     printf 'if [[ "$1" == "-G" ]]; then\n'
     printf '  case "$2" in\n'
     printf '    github.com) printf "identityfile %%s\\n" %q ;;\n' "$id_github_com"
+    printf '    github)     printf "identityfile %%s\\n" %q ;;\n' "$id_github_alias"
     printf '    *)          printf "identityfile ~/.ssh/id_rsa\\n" ;;\n'
     printf '  esac\n'
     printf '  exit 0\n'

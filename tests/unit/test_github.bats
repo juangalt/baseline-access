@@ -137,6 +137,23 @@ setup() {
   refute_output --partial "SSH config updated"
 }
 
+@test "save_github_key: adds github.com stanza even when a 'github' alias (not github.com) already resolves to a github-named key" {
+  # Regression: a prior bug treated a resolvable `github` alias (e.g. one
+  # another tool's SSH config + git url.insteadOf wires up) as proof the
+  # literal github.com host was already covered, and skipped adding its own
+  # stanza — leaving github.com (and thus `ssh -T git@github.com` / any plain
+  # `git@github.com:` clone) unrouted.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh alias
+  run save_github_key
+  assert_success
+  assert_output --partial "SSH config updated"
+  grep -q "Host github.com" "$HOME/.ssh/config"
+  grep -q "IdentityFile ~/.ssh/github" "$HOME/.ssh/config"
+}
+
 @test "save_github_key: second run adds no duplicate config stanza" {
   mock_bw_status unlocked
   mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
