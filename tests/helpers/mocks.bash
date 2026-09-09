@@ -101,7 +101,7 @@ mock_jq_dispatch() {
 # `ssh -T git@github.com` (auth verification).
 # Usage: mock_ssh MODE [VERIFY_BANNER]
 #   MODE (github config presence, drives `ssh -G`):
-#     direct — github.com → IdentityFile ~/.ssh/github
+#     direct — github.com → IdentityFile ~/.ssh/svc-github.com
 #     none   — no github-specific config (only default keys)
 #     alias  — a `github` alias (NOT github.com) resolves to a github-named
 #              key (e.g. ~/.ssh/svc-github); github.com itself stays
@@ -114,7 +114,7 @@ mock_ssh() {
   local mode="${1:-none}" verify="${2:-authed}"
   local id_github_com id_github_alias
   case "$mode" in
-    direct) id_github_com="~/.ssh/github";  id_github_alias="~/.ssh/id_rsa" ;;
+    direct) id_github_com="~/.ssh/svc-github.com";  id_github_alias="~/.ssh/id_rsa" ;;
     none)   id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/id_rsa" ;;
     alias)  id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/svc-github" ;;
     *) printf 'mock_ssh: unknown mode %s\n' "$mode" >&2; return 1 ;;

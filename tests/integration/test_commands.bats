@@ -56,8 +56,8 @@ provision_mocks() {
   assert_output --partial "Git identity configured"
   assert_output --partial "GitHub authentication succeeded"
   assert_output --partial "Machine is git-ready"
-  [[ -f "$HOME/.ssh/github" ]]
-  [[ "$(stat -c '%a' "$HOME/.ssh/github")" == "600" ]]
+  [[ -f "$HOME/.ssh/svc-github.com" ]]
+  [[ "$(stat -c '%a' "$HOME/.ssh/svc-github.com")" == "600" ]]
   grep -q "^github.com" "$HOME/.ssh/known_hosts"
 }
 

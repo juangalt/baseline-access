@@ -13,7 +13,7 @@ value is ever committed — they render from Bitwarden at runtime.
 Never commit secrets, credentials, API keys, private keys, or personal key
 material — not in code, tests, or git history. **Bitwarden is the canonical
 store**; the provisioner fetches the GitHub key from it at runtime (`bw get`),
-and key material only ever exists on disk as `~/.ssh/github` (mode 600) outside
+and key material only ever exists on disk as `~/.ssh/svc-github.com` (mode 600) outside
 this repo. Bitwarden *item names* are acceptable in code (they are not secrets).
 Because the repo is public, this discipline is load-bearing, not optional —
 history is forever and the world can read it.
@@ -26,7 +26,7 @@ provisioning code until it has the GitHub SSH key, but that key lives behind
 Bitwarden. This public repo is the one thing a credential-less machine can
 always clone. After Bitwarden auth it makes the machine **git-ready**:
 
-1. writes the GitHub SSH key to `~/.ssh/github` (mode 600),
+1. writes the GitHub SSH key to `~/.ssh/svc-github.com` (mode 600),
 2. wires `~/.ssh/config` + `~/.ssh/known_hosts` for `github.com` (idempotent),
 3. configures the global git identity (`user.name` / `user.email`),
 4. verifies `ssh -T git@github.com`, then points at the next bootstrap.
@@ -66,7 +66,7 @@ git identity → verify → next-step.
 - **GitHub key only.** Among *secrets* this provisions the GitHub service key and
   nothing else — no recovery key, no configurable item manifest. The recovery key
   reaches *other* hosts and belongs to the fleet flow.
-- **GitHub key is written to disk** at `~/.ssh/github`, mode 600 (`umask 077`).
+- **GitHub key is written to disk** at `~/.ssh/svc-github.com`, mode 600 (`umask 077`).
   No key is ever loaded into ssh-agent here.
 - **SSH only — never HTTPS.** The provisioned credential is an SSH key, so the
   machine is git-ready over `git@github.com:` URLs and nothing else. No

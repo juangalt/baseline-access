@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for: save_github_key()
-# Covers AC4 (key written to ~/.ssh/github mode 600 from the named Bitwarden item)
+# Covers AC4 (key written to ~/.ssh/svc-github.com mode 600 from the named Bitwarden item)
 # and AC5 (idempotent ~/.ssh/config github stanza).
 
 setup() {
@@ -53,28 +53,28 @@ setup() {
 
 @test "save_github_key: exits 1 when field is missing (jq prints literal null)" {
   # bw returns an item without .sshKey.privateKey → jq -r emits "null" (exit 0),
-  # which must not be written to ~/.ssh/github as if it were a real key.
+  # which must not be written to ~/.ssh/svc-github.com as if it were a real key.
   mock_bw_status unlocked
   mock_jq_value "null"
   export BW_SESSION="fake"
   run save_github_key
   assert_failure
   assert_output --partial "GitHub SSH key is empty"
-  [[ ! -f "$HOME/.ssh/github" ]]
+  [[ ! -f "$HOME/.ssh/svc-github.com" ]]
 }
 
 # ── Key written (AC4) ─────────────────────────────────────────────────────────
 
-@test "save_github_key: writes key to ~/.ssh/github with 600 permissions" {
+@test "save_github_key: writes key to ~/.ssh/svc-github.com with 600 permissions" {
   mock_bw_status unlocked
   mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
   export BW_SESSION="fake"
   run save_github_key
   assert_success
   assert_output --partial "GitHub SSH key saved"
-  [[ -f "$HOME/.ssh/github" ]]
-  [[ "$(stat -c '%a' "$HOME/.ssh/github")" == "600" ]]
-  [[ "$(cat "$HOME/.ssh/github")" == "-----BEGIN OPENSSH PRIVATE KEY-----" ]]
+  [[ -f "$HOME/.ssh/svc-github.com" ]]
+  [[ "$(stat -c '%a' "$HOME/.ssh/svc-github.com")" == "600" ]]
+  [[ "$(cat "$HOME/.ssh/svc-github.com")" == "-----BEGIN OPENSSH PRIVATE KEY-----" ]]
 }
 
 @test "save_github_key: creates ~/.ssh if missing" {
@@ -123,7 +123,7 @@ setup() {
   assert_output --partial "SSH config updated"
   [[ -f "$HOME/.ssh/config" ]]
   grep -q "Host github.com" "$HOME/.ssh/config"
-  grep -q "IdentityFile ~/.ssh/github" "$HOME/.ssh/config"
+  grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
   [[ "$(stat -c '%a' "$HOME/.ssh/config")" == "600" ]]
 }
 
@@ -151,7 +151,7 @@ setup() {
   assert_success
   assert_output --partial "SSH config updated"
   grep -q "Host github.com" "$HOME/.ssh/config"
-  grep -q "IdentityFile ~/.ssh/github" "$HOME/.ssh/config"
+  grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
 }
 
 @test "save_github_key: second run adds no duplicate config stanza" {
