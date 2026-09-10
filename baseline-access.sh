@@ -3,7 +3,7 @@
 #
 # Zero-credential entry point: from a brand-new machine, clone this PUBLIC repo
 # (HTTPS, no key needed), run it, authenticate to Bitwarden interactively, and
-# end up fully git-ready — the GitHub SSH key written to ~/.ssh/github (mode 600),
+# end up fully git-ready — the GitHub SSH key written to ~/.ssh/svc-github.com (mode 600),
 # the github.com SSH config + known_hosts wired, and the git identity configured —
 # so the machine can immediately clone private repos and run git.
 #
@@ -58,7 +58,11 @@ require() {
 # the pinned v0.1.0 one-liner keeps resolving; see baseline-setup ADR 0004 D3.
 GITHUB_BW_ITEM="fleet-policy:keys/service/github"
 GITHUB_BW_FIELD='.sshKey.privateKey'
-GITHUB_KEY_FILE="$HOME/.ssh/github"
+# Same filename fleet-control derives from its `github.com` ssh_service
+# (~/.ssh/svc-<service-name>). Sharing the name means a fleet-enrolled host
+# holds ONE key file that fleet audits and prunes, instead of this script
+# leaving a second, orphaned copy that fleet is blind to (it only scans svc-*).
+GITHUB_KEY_FILE="$HOME/.ssh/svc-github.com"
 
 # ── Bitwarden ─────────────────────────────────────────────────────────────────
 
@@ -138,18 +142,18 @@ bw_login_or_unlock() {
 
 # ── GitHub key ────────────────────────────────────────────────────────────────
 
-# True when resolved SSH config already maps github.com (or a `github` alias) to
-# an IdentityFile whose path contains "github". Uses `ssh -G` so Include
-# directives, Host aliases, and wildcards are all honoured.
+# True when resolved SSH config already maps the LITERAL github.com host to an
+# IdentityFile whose path contains "github". Uses `ssh -G` so Include
+# directives and wildcards are honoured. Deliberately does NOT also check a
+# `github` alias: this script's own contract (CLAUDE.md "SSH only") is that
+# plain `git@github.com:` URLs work without relying on any alias or git-level
+# URL rewrite another tool might layer on top. Something else provisioning a
+# `github` alias (e.g. a fleet-control insteadOf rewrite) does not mean the
+# literal host is covered, and treating it as equivalent left `github.com`
+# unrouted while this function reported false coverage.
 ssh_config_has_github() {
   have ssh || return 1
-  local host
-  for host in github.com github; do
-    if ssh -G "$host" 2>/dev/null | grep -qi '^identityfile.*github'; then
-      return 0
-    fi
-  done
-  return 1
+  ssh -G github.com 2>/dev/null | grep -qi '^identityfile.*github'
 }
 
 save_github_key() {
@@ -168,12 +172,12 @@ save_github_key() {
 
   mkdir -p "$HOME/.ssh"
   (umask 077; printf '%s\n' "$key" > "$GITHUB_KEY_FILE")
-  ok "GitHub SSH key saved to ~/.ssh/github"
+  ok "GitHub SSH key saved to ~/.ssh/svc-github.com"
 
   # Ensure SSH uses this key for github.com without needing ssh-agent.
   local ssh_config="$HOME/.ssh/config"
   if ! ssh_config_has_github; then
-    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/github\n' >> "$ssh_config")
+    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n' >> "$ssh_config")
     ok "SSH config updated for github.com"
   fi
 }

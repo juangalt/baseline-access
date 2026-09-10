@@ -71,7 +71,7 @@ unread. The pinned tag exists precisely so you *can* read it first:
 ## SSH, not HTTPS
 
 This script provisions **SSH** access to GitHub, and only SSH. It writes the key
-to `~/.ssh/github`, wires `~/.ssh/config` and `~/.ssh/known_hosts`, and verifies
+to `~/.ssh/svc-github.com`, wires `~/.ssh/config` and `~/.ssh/known_hosts`, and verifies
 `ssh -T git@github.com`.
 
 It sets up **no HTTPS credentials whatsoever** — no `credential.helper`, no
@@ -81,7 +81,7 @@ this rung provisions holds an SSH key, and nothing else.
 So after provisioning, clone with **SSH URLs**:
 
 ```bash
-git clone git@github.com:juangalt/<repo>.git       # ✅ works — uses ~/.ssh/github
+git clone git@github.com:juangalt/<repo>.git       # ✅ works — uses ~/.ssh/svc-github.com
 git clone https://github.com/juangalt/<repo>.git   # ❌ no credentials — will fail
 ```
 
@@ -166,7 +166,7 @@ this public repo.
 
 1. Ensures `bw` + `jq` are present (installs the Bitwarden CLI via brew / npm /
    snap if absent), then `bw login` / `bw unlock` interactively.
-2. Fetches the GitHub service key and writes `~/.ssh/github` (mode 600).
+2. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600).
 3. Ensures the `github.com` stanza in `~/.ssh/config` and host keys in
    `~/.ssh/known_hosts` — appending only if absent (safe to re-run).
 4. Configures the global git identity if unset.

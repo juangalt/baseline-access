@@ -84,3 +84,34 @@ Resolved forks (all at their recommended option, 2026-06-14):
   purpose; the coupling is the item name, documented in both repos' `CLAUDE.md`.
 - A real divergence between `ssh-access service key: github` and the fleet's
   `fleet-policy:keys/service/github` would warrant its own reconcile item.
+
+## Amendment — 2026-09-09: the key file is `~/.ssh/svc-github.com`
+
+Decision point 2 above ("write the GitHub service key to `~/.ssh/github`") is
+superseded. The key is now written to `~/.ssh/svc-github.com`, and the SSH
+config stanza this script appends points there.
+
+Why: the Consequences section anticipated that "a real divergence between
+`ssh-access service key: github` and the fleet's `fleet-policy:keys/service/github`
+would warrant its own reconcile item." The divergence that actually materialised
+was not in the Bitwarden item — both tools already agreed on that — but in the
+**filename on disk**. fleet-control derives its path from its `ssh_services`
+entry name (`~/.ssh/svc-<service>`), so a fleet-enrolled host ended up holding
+two byte-identical private keys: this script's `~/.ssh/github` and fleet's
+`~/.ssh/svc-github`.
+
+The duplicate was not merely redundant, it was inert. A fleet deploy rewrites
+`~/.ssh/config` to `Include config.d/*`, which silently deletes the `Host
+github.com` stanza this script appends, and fleet's own audit and stray-key
+prune only ever scan `svc-*` — so fleet could neither see nor clean the orphan.
+On x1-carbon that left `~/.ssh/github` unreferenced from 2026-08-23 onward.
+
+Adopting fleet's filename means a fleet-enrolled host holds ONE key that fleet
+audits and prunes, and `ssh_config_has_github()` is satisfied by fleet's own
+rendered block, so no stanza is appended there at all. On a non-fleet host the
+behaviour is unchanged: the key is written and the stanza appended as before.
+
+The `.com` suffix follows fleet's `ssh_services` entry being renamed
+`github` → `github.com` the same day (content-fleet-policy `4426869`), so that
+its rendered `Host` alias matches canonical `git@github.com:` URLs directly
+rather than through a `git_insteadof` rewrite.
