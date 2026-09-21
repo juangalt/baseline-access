@@ -87,3 +87,33 @@ provision_mocks() {
   [[ ! -f "$BATS_TEST_TMPDIR/ssh-agent.calls" ]]
   [[ ! -f "$HOME/.ssh/recovery" ]]
 }
+
+# ── curl | bash (script arrives on stdin) ────────────────────────────────────
+
+@test "piped script: prompts read the prompt source, not the script pipe" {
+  provision_mocks
+  unset GIT_IDENTITY_NAME GIT_IDENTITY_EMAIL
+  printf 'Piped User\npiped@example.com\n' > "$BATS_TEST_TMPDIR/answers"
+  export BASELINE_PROMPT_IN="$BATS_TEST_TMPDIR/answers"
+  run bash -c "cat '$BOOTSTRAP' | bash"
+  assert_success
+  assert_output --partial "Git identity configured (Piped User <piped@example.com>)"
+  assert_output --partial "Machine is git-ready"
+}
+
+@test "piped script: no terminal and no answer dies with a clear message" {
+  provision_mocks
+  unset GIT_IDENTITY_NAME BASELINE_PROMPT_IN
+  # Pre-fix, read hit EOF under set -e and the script exited 1 silently.
+  run setsid -w bash -c "cat '$BOOTSTRAP' | bash"
+  assert_failure
+  assert_output --partial "git user.name not provided"
+}
+
+@test "script run from its file: piped answers on stdin still feed the prompts" {
+  provision_mocks
+  unset GIT_IDENTITY_NAME GIT_IDENTITY_EMAIL BASELINE_PROMPT_IN
+  run bash -c "printf 'Stdin User\nstdin@example.com\n' | bash '$BOOTSTRAP'"
+  assert_success
+  assert_output --partial "Git identity configured (Stdin User <stdin@example.com>)"
+}

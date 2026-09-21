@@ -48,6 +48,38 @@ require() {
   have "$1" || die "Required tool not found: $1"
 }
 
+# Where interactive prompts (our `read`s and bw's own login/unlock prompts) take
+# their input. Under the `curl … | bash` one-liner, stdin IS the script pipe, so
+# reading it yields EOF instead of the operator's keystrokes — fall back to the
+# controlling terminal. Only then: a script run from its file keeps stdin, so
+# `printf 'name\nemail\n' | ./baseline-access.sh` still answers the prompts.
+# With no terminal either (CI) stdin is used and a missing answer dies with a
+# clear message. BASELINE_PROMPT_IN overrides (tests).
+prompt_in() {
+  if [[ -n "${BASELINE_PROMPT_IN:-}" ]]; then
+    printf '%s\n' "$BASELINE_PROMPT_IN"
+  elif [[ -t 0 || -f "${BASH_SOURCE[0]}" ]]; then
+    # BASH_SOURCE is the script path when run from a file, "bash" when piped.
+    printf '/dev/stdin\n'
+  elif { : </dev/tty; } 2>/dev/null; then
+    printf '/dev/tty\n'
+  else
+    printf '/dev/stdin\n'
+  fi
+}
+
+# Run "$@" with stdin taken from prompt_in(). Plain stdin is inherited rather
+# than re-opened via /dev/stdin, which fails when fd 0 is closed or a socket.
+with_prompt_in() {
+  local src
+  src=$(prompt_in)
+  if [[ "$src" == /dev/stdin ]]; then
+    "$@"
+  else
+    "$@" <"$src"
+  fi
+}
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Bitwarden item carrying the GitHub service key. Standardized on the fleet
 # skill's reference name `fleet-policy:keys/service/github` — the same key
@@ -120,15 +152,15 @@ bw_login_or_unlock() {
     case "$bw_st" in
       unauthenticated)
         info "Logging in to Bitwarden..."
-        session=$(bw login --raw) || die "bw login failed"
+        session=$(with_prompt_in bw login --raw) || die "bw login failed"
         ;;
       locked)
         info "Unlocking Bitwarden vault..."
-        session=$(bw unlock --raw) || die "bw unlock failed"
+        session=$(with_prompt_in bw unlock --raw) || die "bw unlock failed"
         ;;
       unlocked|authenticated)
         info "Vault already unlocked — refreshing BW_SESSION"
-        session=$(bw unlock --raw) || die "bw unlock failed"
+        session=$(with_prompt_in bw unlock --raw) || die "bw unlock failed"
         ;;
       *)
         die "Unexpected bw status: ${bw_st}"
@@ -207,6 +239,19 @@ ensure_known_hosts() {
 
 # ── git identity ──────────────────────────────────────────────────────────────
 
+# Prompt for whichever of the caller's `name` / `email` locals are still empty
+# (bash dynamic scoping). Both reads share one stdin, so a single with_prompt_in
+# redirect feeds them in order. `|| true`: read fails on EOF, and under `set -e`
+# that would exit silently instead of reaching the "not provided" message.
+prompt_git_identity() {
+  if [[ -z "$name" ]]; then
+    read -rp "  git user.name: " name || true
+  fi
+  if [[ -z "$email" ]]; then
+    read -rp "  git user.email: " email || true
+  fi
+}
+
 # Configure the global git identity if it isn't already set. Values come from
 # GIT_IDENTITY_NAME / GIT_IDENTITY_EMAIL when set (the unattended path), else the
 # operator is prompted interactively. Already-configured identities are left
@@ -235,12 +280,7 @@ configure_git_identity() {
     dim "Find yours under GitHub → Settings → Emails."
   fi
 
-  if [[ -z "$name" ]]; then
-    read -rp "  git user.name: " name
-  fi
-  if [[ -z "$email" ]]; then
-    read -rp "  git user.email: " email
-  fi
+  with_prompt_in prompt_git_identity
 
   [[ -n "$name"  ]] || die "git user.name not provided (set GIT_IDENTITY_NAME or answer the prompt)"
   [[ -n "$email" ]] || die "git user.email not provided (set GIT_IDENTITY_EMAIL or answer the prompt)"
