@@ -107,6 +107,8 @@ mock_jq_dispatch() {
 #              key (e.g. ~/.ssh/svc-github); github.com itself stays
 #              unrouted. Simulates another tool (fleet-control) provisioning
 #              an alias without covering the literal host.
+#     path:P — github.com → IdentityFile P, printed verbatim (unexpanded, as
+#              the real `ssh -G` does), e.g. path:~/.ssh/github_personal.
 #   VERIFY_BANNER (drives `ssh -T`, optional):
 #     authed   — emit the "successfully authenticated" banner (default)
 #     denied   — emit a permission-denied banner
@@ -117,6 +119,7 @@ mock_ssh() {
     direct) id_github_com="~/.ssh/svc-github.com";  id_github_alias="~/.ssh/id_rsa" ;;
     none)   id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/id_rsa" ;;
     alias)  id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/svc-github" ;;
+    path:*) id_github_com="${mode#path:}";  id_github_alias="~/.ssh/id_rsa" ;;
     *) printf 'mock_ssh: unknown mode %s\n' "$mode" >&2; return 1 ;;
   esac
   local banner

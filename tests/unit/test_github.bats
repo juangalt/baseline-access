@@ -173,6 +173,63 @@ setup() {
   refute_output --partial "SSH config updated"
 }
 
+@test "save_github_key: adds github.com stanza when github.com uses a different github-named key" {
+  # Regression: any IdentityFile containing "github" used to count as coverage,
+  # so a personal key like ~/.ssh/github_personal skipped the stanza and the key
+  # just fetched was never offered.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh 'path:~/.ssh/github_personal'
+  run save_github_key
+  assert_success
+  assert_output --partial "SSH config updated"
+  grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
+}
+
+# ── ssh_config_has_github: exact-path match ───────────────────────────────────
+
+@test "ssh_config_has_github: true for ~/.ssh/svc-github.com" {
+  mock_ssh 'path:~/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: true for the absolute path" {
+  mock_ssh "path:$HOME/.ssh/svc-github.com"
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: true for the %d and \${HOME} forms ssh expands" {
+  mock_ssh 'path:%d/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+  mock_ssh 'path:${HOME}/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: false for another github-named key" {
+  mock_ssh 'path:~/.ssh/github_personal'
+  run ssh_config_has_github
+  assert_failure
+}
+
+@test "ssh_config_has_github: false for a path that merely starts with ours" {
+  mock_ssh 'path:~/.ssh/svc-github.com.bak'
+  run ssh_config_has_github
+  assert_failure
+}
+
+@test "ssh_config_has_github: false when ssh is absent" {
+  rm -f "$MOCK_BIN/ssh"
+  only_mocks_on_path
+  run ssh_config_has_github
+  restore_path
+  assert_failure
+}
+
 @test "save_github_key: adds github.com stanza even when a 'github' alias (not github.com) already resolves to a github-named key" {
   # Regression: a prior bug treated a resolvable `github` alias (e.g. one
   # another tool's SSH config + git url.insteadOf wires up) as proof the

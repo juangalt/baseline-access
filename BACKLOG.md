@@ -1,9 +1,21 @@
 # baseline-access backlog
-<!-- next-id: 4 -->
+<!-- next-id: 5 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-4 — any "github"-named key counted as github.com coverage — **done**
+
+`ssh_config_has_github` matched `^identityfile.*github` in `ssh -G github.com`,
+so an unrelated key such as `~/.ssh/github_personal` made `save_github_key` skip
+its `Host github.com` stanza, and the key it had just fetched was never offered.
+
+**Fix:** only an exact match on `~/.ssh/svc-github.com` counts. `ssh -G` prints
+paths unexpanded, so `~/`, `%d/` and `${HOME}/` are resolved first. Checked
+against real `ssh -G` output for each form, plus `github_personal` and a
+`svc-github.com.bak` lookalike (both correctly not covered). Appending our
+stanza next to another github.com key is harmless: `IdentityFile` accumulates.
 
 ### B-3 — known_hosts not idempotent when hashed, trusted on first use; key mode inherited — **done**
 

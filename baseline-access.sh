@@ -176,9 +176,20 @@ bw_login_or_unlock() {
 
 # ── GitHub key ────────────────────────────────────────────────────────────────
 
-# True when resolved SSH config already maps the LITERAL github.com host to an
-# IdentityFile whose path contains "github". Uses `ssh -G` so Include
-# directives and wildcards are honoured. Deliberately does NOT also check a
+# True when resolved SSH config already maps the LITERAL github.com host to
+# THIS script's key, $GITHUB_KEY_FILE. Uses `ssh -G` so Include directives and
+# wildcards are honoured — fleet-control's rendered block satisfies it, since it
+# points at the same file.
+#
+# Only an exact path match counts. Any other "github"-named key (say
+# ~/.ssh/github_personal) says nothing about the key just fetched, and treating
+# it as coverage skipped the stanza and left that key unused. Adding our stanza
+# alongside theirs is harmless: IdentityFile accumulates across matching blocks.
+#
+# `ssh -G` prints paths as written, unexpanded, so the home-directory forms
+# ssh itself expands (~/, %d/, ${HOME}/) are resolved before comparing.
+#
+# Deliberately does NOT also check a
 # `github` alias: this script's own contract (CLAUDE.md "SSH only") is that
 # plain `git@github.com:` URLs work without relying on any alias or git-level
 # URL rewrite another tool might layer on top. Something else provisioning a
@@ -187,7 +198,18 @@ bw_login_or_unlock() {
 # unrouted while this function reported false coverage.
 ssh_config_has_github() {
   have ssh || return 1
-  ssh -G github.com 2>/dev/null | grep -qi '^identityfile.*github'
+  local opt path
+  # `ssh -G` prints option names lowercased; `read` keeps any spaces in the path.
+  while read -r opt path; do
+    [[ "$opt" == identityfile ]] || continue
+    case "$path" in
+      '~/'*)       path="$HOME/${path#\~/}" ;;
+      '%d/'*)      path="$HOME/${path#%d/}" ;;
+      '${HOME}/'*) path="$HOME/${path#\$\{HOME\}/}" ;;
+    esac
+    [[ "$path" == "$GITHUB_KEY_FILE" ]] && return 0
+  done < <(ssh -G github.com 2>/dev/null)
+  return 1
 }
 
 save_github_key() {
