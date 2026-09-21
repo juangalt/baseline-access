@@ -95,6 +95,8 @@ GITHUB_BW_FIELD='.sshKey.privateKey'
 # holds ONE key file that fleet audits and prunes, instead of this script
 # leaving a second, orphaned copy that fleet is blind to (it only scans svc-*).
 GITHUB_KEY_FILE="$HOME/.ssh/svc-github.com"
+# GitHub's published SSH host keys (`.ssh_keys`), fetched over TLS.
+GITHUB_META_URL="https://api.github.com/meta"
 
 # ── Bitwarden ─────────────────────────────────────────────────────────────────
 
@@ -202,8 +204,14 @@ save_github_key() {
   # missing/null, so guard against that too — not just the empty string.
   [[ -n "$key" && "$key" != "null" ]] || die "GitHub SSH key is empty — check the Bitwarden item"
 
-  mkdir -p "$HOME/.ssh"
-  (umask 077; printf '%s\n' "$key" > "$GITHUB_KEY_FILE")
+  # Write to a fresh temp file (mktemp creates it 0600) and rename it into place.
+  # Truncating the existing file would keep whatever mode it already had — e.g.
+  # 0644 from a hand-copied key — and follow a symlink; the rename replaces both.
+  (umask 077; mkdir -p "$HOME/.ssh")
+  local tmp
+  tmp=$(mktemp "$HOME/.ssh/.svc-github.com.XXXXXX")
+  printf '%s\n' "$key" > "$tmp"
+  mv -f "$tmp" "$GITHUB_KEY_FILE"
   ok "GitHub SSH key saved to ~/.ssh/svc-github.com"
 
   # Ensure SSH uses this key for github.com without needing ssh-agent.
@@ -217,24 +225,48 @@ save_github_key() {
 # ── known_hosts ───────────────────────────────────────────────────────────────
 
 # Idempotently add github.com's host keys to ~/.ssh/known_hosts so the first
-# git/ssh connection doesn't trip the interactive host-key prompt. Appends only
-# when github.com is absent.
+# git/ssh connection doesn't trip the interactive host-key prompt.
+#
+# The keys come from GitHub's API over TLS, not `ssh-keyscan`: keyscan trusts
+# whatever answers on port 22, so a first boot on a hostile network would pin an
+# attacker's key. The API list also tracks GitHub's key rotations, which a
+# hardcoded fingerprint would not.
+#
+# Presence is checked per key with `ssh-keygen -F`, which matches hashed entries
+# (HashKnownHosts yes, the Debian/Ubuntu default) that a plain grep for
+# `^github.com` never sees — that miss re-appended the keys on every run. Only
+# missing keys are appended; existing entries are never rewritten or removed.
 ensure_known_hosts() {
-  require ssh-keyscan
+  require curl
+  require jq
+  require ssh-keygen
   local known="$HOME/.ssh/known_hosts"
-  mkdir -p "$HOME/.ssh"
+  (umask 077; mkdir -p "$HOME/.ssh")
 
-  if [[ -f "$known" ]] && grep -q '^github\.com[, ]' "$known"; then
-    return 0
-  fi
-
+  # `||` outside the substitution, as in bw_login_or_unlock: a failing pipeline
+  # must replace the value, not append to it. jq fails on a missing .ssh_keys.
   local keys
-  keys=$(ssh-keyscan github.com 2>/dev/null) \
-    || die "ssh-keyscan github.com failed"
-  [[ -n "$keys" ]] || die "ssh-keyscan returned no host keys for github.com"
+  keys=$(curl -fsSL "$GITHUB_META_URL" | jq -r '.ssh_keys[]') \
+    || die "Failed to fetch github.com host keys from $GITHUB_META_URL"
+  [[ -n "$keys" ]] || die "GitHub API returned no SSH host keys"
 
-  (umask 077; printf '%s\n' "$keys" >> "$known")
-  ok "github.com added to ~/.ssh/known_hosts"
+  local present="" key added=0
+  if [[ -f "$known" ]]; then
+    present=$(ssh-keygen -F github.com -f "$known" 2>/dev/null) || true
+  fi
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    # `ssh-keygen -F` prints matching entries as "<host> <type> <base64>".
+    grep -qF -- " $key" <<<"$present" && continue
+    (umask 077; printf 'github.com %s\n' "$key" >> "$known")
+    added=$((added + 1))
+  done <<<"$keys"
+
+  if (( added > 0 )); then
+    ok "github.com host keys added to ~/.ssh/known_hosts ($added)"
+  else
+    ok "github.com host keys already in ~/.ssh/known_hosts"
+  fi
 }
 
 # ── git identity ──────────────────────────────────────────────────────────────

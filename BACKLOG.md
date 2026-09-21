@@ -1,9 +1,26 @@
 # baseline-access backlog
-<!-- next-id: 3 -->
+<!-- next-id: 4 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-3 — known_hosts not idempotent when hashed, trusted on first use; key mode inherited — **done**
+
+- `ensure_known_hosts` grepped for `^github.com`, which never matches hashed
+  entries (`HashKnownHosts yes`, the Debian/Ubuntu default), so every re-run
+  appended the keys again. It also took the keys from `ssh-keyscan`, trusting
+  whatever answered on port 22.
+- `save_github_key` truncated an existing `~/.ssh/svc-github.com` in place, so
+  the file kept whatever mode it already had (`umask` only applies on create)
+  and a symlink was written through.
+
+**Fix:** host keys come from `https://api.github.com/meta` (`.ssh_keys`) over TLS;
+presence is checked per key with `ssh-keygen -F`, appending only missing keys and
+never touching existing entries. The key is written to a `mktemp` file (0600) and
+renamed into place; a newly created `~/.ssh` is 0700. Verified against the live
+API: three keys added, a hashed re-run adds none, and `ssh` with
+`StrictHostKeyChecking=yes` authenticates against them.
 
 ### B-2 — `curl | bash` one-liner cannot prompt; pinned tag stale — **done**
 

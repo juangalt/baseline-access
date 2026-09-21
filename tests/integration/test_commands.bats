@@ -37,10 +37,9 @@ setup() {
 
 provision_mocks() {
   mock_bw_status unauthenticated
-  mock_jq_dispatch ".status=unauthenticated" \
+  mock_github_meta 0 "$GH_ED25519" ".status=unauthenticated" \
                    ".sshKey.privateKey=-----BEGIN OPENSSH PRIVATE KEY-----"
   mock_ssh none authed
-  mock_ssh_keyscan 0 "github.com ssh-ed25519 AAAAFAKEKEYMATERIAL"
   mock_git_identity
   export GIT_IDENTITY_NAME="Test User"
   export GIT_IDENTITY_EMAIL="test@example.com"
@@ -52,7 +51,7 @@ provision_mocks() {
   assert_success
   assert_output --partial "BW_SESSION exported"
   assert_output --partial "GitHub SSH key saved"
-  assert_output --partial "github.com added to ~/.ssh/known_hosts"
+  assert_output --partial "github.com host keys added to ~/.ssh/known_hosts"
   assert_output --partial "Git identity configured"
   assert_output --partial "GitHub authentication succeeded"
   assert_output --partial "Machine is git-ready"

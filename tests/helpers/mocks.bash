@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mock factory helpers. Requires setup_mock_bin() to have been called first.
-# Every external tool the script touches (bw, jq, git, ssh, ssh-keyscan, brew,
+# Every external tool the script touches (bw, jq, git, ssh, curl, brew,
 # npm, snap, sudo) is mocked here via PATH prepend — tests make no real calls.
 
 # Write a simple mock that exits with EXIT_CODE and optionally prints OUTPUT.
@@ -142,17 +142,31 @@ mock_ssh() {
   chmod +x "$MOCK_BIN/ssh"
 }
 
-# Write an ssh-keyscan mock. $1 = exit code, $2 = stdout (host-key lines).
-# Usage: mock_ssh_keyscan [RC] [OUTPUT]
-mock_ssh_keyscan() {
-  local rc="${1:-0}"
-  local out="${2-github.com ssh-ed25519 AAAAFAKEKEYMATERIAL}"
+# GitHub's real published host keys (public, not secrets) — real key blobs so the
+# unmocked `ssh-keygen -F` accepts them.
+GH_ED25519="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+GH_ECDSA="ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg="
+
+# Mock GitHub's meta API for ensure_known_hosts(): a curl that records its URL
+# and exits RC, and a jq dispatch that yields KEYS (newline-separated) for
+# `.ssh_keys[]`. Extra jq mappings (e.g. ".status=unlocked") pass through.
+# `ssh-keygen` is deliberately NOT mocked: `-F` is a read-only lookup on the
+# test's own known_hosts, and matching hashed entries means reproducing its HMAC.
+# Usage: mock_github_meta RC KEYS [JQ_MAPPING...]
+mock_github_meta() {
+  local rc="$1" keys="$2"; shift 2
   {
-    printf '#!/usr/bin/env bash\n'
-    [[ -n "$out" ]] && printf 'printf "%%s\\n" %q\n' "$out"
-    printf 'exit %s\n' "$rc"
-  } > "$MOCK_BIN/ssh-keyscan"
-  chmod +x "$MOCK_BIN/ssh-keyscan"
+    printf '#!/usr/bin/env bash
+'
+    printf 'printf "%%s\n" "$*" >> %q
+' "$BATS_TEST_TMPDIR/curl.calls"
+    printf 'printf "{}\n"
+'
+    printf 'exit %s
+' "$rc"
+  } > "$MOCK_BIN/curl"
+  chmod +x "$MOCK_BIN/curl"
+  mock_jq_dispatch ".ssh_keys=$keys" "$@"
 }
 
 # Write a git mock for identity config. Backed by a flat key/value store file so

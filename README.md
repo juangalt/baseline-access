@@ -55,12 +55,12 @@ For the impatient. The raw URL is **pinned to a release tag** (not `main`) so th
 bytes piped into your shell are reviewable and stable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-access/v0.3.0/baseline-access.sh | bash
+curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-access/v0.3.1/baseline-access.sh | bash
 ```
 
 Prefer clone-then-run when you can — piping remote code into a shell runs it
 unread. The pinned tag exists precisely so you *can* read it first:
-<https://github.com/juangalt/baseline-access/blob/v0.3.0/baseline-access.sh>.
+<https://github.com/juangalt/baseline-access/blob/v0.3.1/baseline-access.sh>.
 
 (This URL is HTTPS for the same reason as the clone above: no key exists yet.)
 
@@ -166,9 +166,13 @@ this public repo.
 
 1. Ensures `bw` + `jq` are present (installs the Bitwarden CLI via brew / npm /
    snap if absent), then `bw login` / `bw unlock` interactively.
-2. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600).
-3. Ensures the `github.com` stanza in `~/.ssh/config` and host keys in
-   `~/.ssh/known_hosts` — appending only if absent (safe to re-run).
+2. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600,
+   replacing any existing file rather than inheriting its permissions).
+3. Ensures the `github.com` stanza in `~/.ssh/config`, and GitHub's host keys in
+   `~/.ssh/known_hosts` — taken from GitHub's API over TLS
+   (`https://api.github.com/meta`), not trusted from whatever answers
+   `ssh-keyscan`, and appended only if missing, hashed entries included (safe to
+   re-run).
 4. Configures the global git identity if unset.
 5. Verifies `ssh -T git@github.com` and prints the next step.
 
