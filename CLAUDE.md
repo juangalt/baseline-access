@@ -85,6 +85,14 @@ git identity → verify → next-step.
   hardcoded to brew.
 - **Idempotent**: re-running never duplicates the SSH config stanza or the
   known_hosts entry, and never clobbers an already-configured git identity.
+  known_hosts presence is checked per key with `ssh-keygen -F`, so hashed
+  entries (`HashKnownHosts yes`) count.
+- **Host keys from GitHub's API, not keyscan**: `ensure_known_hosts` pins the
+  `.ssh_keys` list from `https://api.github.com/meta` (TLS-authenticated) rather
+  than `ssh-keyscan`, which trusts whatever answers on port 22. Needs `curl`.
+- **Key file replaced, not truncated**: the key goes to a `mktemp` file (0600)
+  renamed over `~/.ssh/svc-github.com`, so a pre-existing wider mode or symlink
+  never carries over.
 - **Self-contained**: it does not clone/run any machine-class bootstrap, touch
   dotfiles/packages/dconf beyond git config, set hostname, or manage fleet policy.
 - It keeps an **independent copy** of the Bitwarden login + key-fetch logic that
@@ -136,6 +144,8 @@ tests/run tests/unit/test_github.bats  # one file
 
 - **bats** with bats-core, bats-support, bats-assert **vendored** under
   `tests/bats.d/` — no system bats or submodule init needed.
-- All external tools (`bw`, `jq`, `git`, `ssh`, `ssh-keyscan`, the package
-  managers, `sudo`) are mocked via PATH prepend — no real system calls, no real
-  Bitwarden auth, no secrets in tests.
+- All external tools (`bw`, `jq`, `git`, `ssh`, `curl`, the package managers,
+  `sudo`) are mocked via PATH prepend — no real system calls, no real Bitwarden
+  auth, no secrets in tests. The one exception is `ssh-keygen -F`: a read-only
+  lookup on the test's own `known_hosts`, left real because matching hashed
+  entries means reproducing its HMAC (those tests skip if it is missing).

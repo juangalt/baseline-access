@@ -77,6 +77,42 @@ setup() {
   [[ "$(cat "$HOME/.ssh/svc-github.com")" == "-----BEGIN OPENSSH PRIVATE KEY-----" ]]
 }
 
+@test "save_github_key: tightens an existing key file's wider mode to 600" {
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mkdir -p "$HOME/.ssh"
+  printf 'OLD\n' > "$HOME/.ssh/svc-github.com"
+  chmod 644 "$HOME/.ssh/svc-github.com"
+  run save_github_key
+  assert_success
+  [[ "$(stat -c '%a' "$HOME/.ssh/svc-github.com")" == "600" ]]
+  [[ "$(cat "$HOME/.ssh/svc-github.com")" == "-----BEGIN OPENSSH PRIVATE KEY-----" ]]
+}
+
+@test "save_github_key: replaces a symlinked key file instead of writing through it" {
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mkdir -p "$HOME/.ssh"
+  printf 'TARGET\n' > "$BATS_TEST_TMPDIR/elsewhere"
+  ln -s "$BATS_TEST_TMPDIR/elsewhere" "$HOME/.ssh/svc-github.com"
+  run save_github_key
+  assert_success
+  [[ ! -L "$HOME/.ssh/svc-github.com" ]]
+  [[ "$(cat "$BATS_TEST_TMPDIR/elsewhere")" == "TARGET" ]]
+  [[ "$(stat -c '%a' "$HOME/.ssh/svc-github.com")" == "600" ]]
+}
+
+@test "save_github_key: leaves no temp file behind" {
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  run save_github_key
+  assert_success
+  [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
+}
+
 @test "save_github_key: creates ~/.ssh if missing" {
   mock_bw_status unlocked
   mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
