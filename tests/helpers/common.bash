@@ -21,6 +21,9 @@ isolate_environment() {
         GIT_IDENTITY_NAME GIT_IDENTITY_EMAIL
   export HOME="$BATS_TEST_TMPDIR/home"
   mkdir -p "$HOME"
+  # Pin prompts to stdin: bats' stdin is not a tty, so prompt_in() would otherwise
+  # fall back to /dev/tty and block on the terminal running the suite.
+  export BASELINE_PROMPT_IN=/dev/stdin
 }
 
 # Create a per-test mock bin dir and prepend it to PATH.

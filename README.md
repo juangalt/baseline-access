@@ -55,12 +55,12 @@ For the impatient. The raw URL is **pinned to a release tag** (not `main`) so th
 bytes piped into your shell are reviewable and stable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-access/v0.2.0/baseline-access.sh | bash
+curl -fsSL https://raw.githubusercontent.com/juangalt/baseline-access/v0.3.0/baseline-access.sh | bash
 ```
 
 Prefer clone-then-run when you can — piping remote code into a shell runs it
 unread. The pinned tag exists precisely so you *can* read it first:
-<https://github.com/juangalt/baseline-access/blob/v0.2.0/baseline-access.sh>.
+<https://github.com/juangalt/baseline-access/blob/v0.3.0/baseline-access.sh>.
 
 (This URL is HTTPS for the same reason as the clone above: no key exists yet.)
 

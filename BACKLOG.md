@@ -1,9 +1,23 @@
 # baseline-access backlog
-<!-- next-id: 2 -->
+<!-- next-id: 3 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-2 — `curl | bash` one-liner cannot prompt; pinned tag stale — **done**
+
+Under `curl … | bash`, stdin is the script pipe, so `read` (git identity) and
+bw's own login/unlock prompts read EOF instead of the operator's keystrokes. The
+identity `read` then failed under `set -e` and the script exited 1 with **no
+message**. Separately, the README pinned `v0.2.0`, which predates B-1, the
+`github.com` alias-detection fix, and the `svc-github.com` key path.
+
+**Fix:** prompts go through `with_prompt_in`, which uses stdin when it is a tty,
+else the controlling terminal (`/dev/tty`), else stdin; a missing answer now
+dies with the "not provided" message. Verified under a real pty with the script
+piped into bash (identity read from the terminal; pre-fix exits silently). The
+README pin moves to `v0.3.0`, cut from the merge of this fix.
 
 ### B-1 — flaky bats suite — **done**
 
