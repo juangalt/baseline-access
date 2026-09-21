@@ -51,12 +51,15 @@ require() {
 # Where interactive prompts (our `read`s and bw's own login/unlock prompts) take
 # their input. Under the `curl … | bash` one-liner, stdin IS the script pipe, so
 # reading it yields EOF instead of the operator's keystrokes — fall back to the
-# controlling terminal. With neither (CI, no tty) stdin is used and a missing
-# answer dies with a clear message. BASELINE_PROMPT_IN overrides (tests).
+# controlling terminal. Only then: a script run from its file keeps stdin, so
+# `printf 'name\nemail\n' | ./baseline-access.sh` still answers the prompts.
+# With no terminal either (CI) stdin is used and a missing answer dies with a
+# clear message. BASELINE_PROMPT_IN overrides (tests).
 prompt_in() {
   if [[ -n "${BASELINE_PROMPT_IN:-}" ]]; then
     printf '%s\n' "$BASELINE_PROMPT_IN"
-  elif [[ -t 0 ]]; then
+  elif [[ -t 0 || -f "${BASH_SOURCE[0]}" ]]; then
+    # BASH_SOURCE is the script path when run from a file, "bash" when piped.
     printf '/dev/stdin\n'
   elif { : </dev/tty; } 2>/dev/null; then
     printf '/dev/tty\n'

@@ -109,3 +109,11 @@ provision_mocks() {
   assert_failure
   assert_output --partial "git user.name not provided"
 }
+
+@test "script run from its file: piped answers on stdin still feed the prompts" {
+  provision_mocks
+  unset GIT_IDENTITY_NAME GIT_IDENTITY_EMAIL BASELINE_PROMPT_IN
+  run bash -c "printf 'Stdin User\nstdin@example.com\n' | bash '$BOOTSTRAP'"
+  assert_success
+  assert_output --partial "Git identity configured (Stdin User <stdin@example.com>)"
+}
