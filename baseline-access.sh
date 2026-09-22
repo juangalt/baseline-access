@@ -199,9 +199,17 @@ ssh_config_has_github() {
   have ssh || return 1
   local path
   while IFS= read -r path; do
-    [[ "$path" == "$GITHUB_KEY_FILE" ]] && return 0
+    is_github_key_file "$path" && return 0
   done < <(github_identity_files)
   return 1
+}
+
+# True when PATH names $GITHUB_KEY_FILE: the same string, or the same file by
+# another route (`-ef`: same device + inode). The latter covers Bluefin/Silverblue,
+# where $HOME is /var/home/<user> but /home is a symlink to /var/home, so a
+# config written as /home/<user>/.ssh/svc-github.com is still our key.
+is_github_key_file() {
+  [[ "$1" == "$GITHUB_KEY_FILE" || "$1" -ef "$GITHUB_KEY_FILE" ]]
 }
 
 # Print the IdentityFiles `ssh -G github.com` resolves, in the order ssh tries
@@ -232,7 +240,7 @@ ssh_config_github_key_first() {
   # `read` from a process substitution, not `| head -n1`: no pipeline, so no
   # pipefail/SIGPIPE when the reader stops after one line.
   IFS= read -r first < <(github_identity_files) || true
-  [[ "$first" == "$GITHUB_KEY_FILE" ]]
+  [[ -n "$first" ]] && is_github_key_file "$first"
 }
 
 # True when resolved SSH config for github.com sets `IdentitiesOnly yes`.
@@ -266,10 +274,17 @@ save_github_key() {
   # Truncating the existing file would keep whatever mode it already had — e.g.
   # 0644 from a hand-copied key — and follow a symlink; the rename replaces both.
   (umask 077; mkdir -p "$HOME/.ssh")
+  # `mv` onto a directory moves the file INTO it and succeeds; refuse instead
+  # (`mv -T` would do it, but is GNU-only and this also runs on macOS).
+  [[ ! -d "$GITHUB_KEY_FILE" ]] || die "$GITHUB_KEY_FILE is a directory — remove it and re-run"
   local tmp
   tmp=$(mktemp "$HOME/.ssh/.svc-github.com.XXXXXX")
-  printf '%s\n' "$key" > "$tmp"
-  mv -f "$tmp" "$GITHUB_KEY_FILE"
+  # On a failed write or rename (disk full, …) remove the temp copy rather
+  # than leave key material in a stray file.
+  if ! { printf '%s\n' "$key" > "$tmp" && mv -f "$tmp" "$GITHUB_KEY_FILE"; }; then
+    rm -f "$tmp"
+    die "Failed to write $GITHUB_KEY_FILE"
+  fi
   ok "GitHub SSH key saved to ~/.ssh/svc-github.com"
 
   # Ensure SSH uses this key — and only this key — for github.com, without
@@ -433,7 +448,20 @@ print_next_step() {
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 
+# Fail before Bitwarden login, not halfway through, when a required tool is
+# missing. bw is exempt: install_bw fetches it. Distro package names differ
+# (openssh-client vs openssh), so the hint names the tools, not packages.
+preflight() {
+  local tool missing=()
+  for tool in curl jq git ssh ssh-keygen; do
+    have "$tool" || missing+=("$tool")
+  done
+  (( ${#missing[@]} == 0 )) && return 0
+  die "Missing required tools: ${missing[*]} — install them with your package manager (e.g. apt/dnf/pacman/brew: curl, jq, git, openssh)"
+}
+
 cmd_provision() {
+  preflight
   bw_login_or_unlock
   header "GitHub SSH Key"
   save_github_key

@@ -60,6 +60,18 @@ provision_mocks() {
   grep -q "^github.com" "$HOME/.ssh/known_hosts"
 }
 
+@test "provision: a missing required tool dies before Bitwarden login" {
+  provision_mocks
+  # PATH = mocks only: bw/jq/curl/ssh/git are mocked, ssh-keygen is not.
+  only_mocks_on_path
+  run bash "$BOOTSTRAP"
+  restore_path
+  assert_failure
+  assert_output --partial "Missing required tools: ssh-keygen"
+  refute_output --partial "Bitwarden Login"
+  [[ ! -e "$HOME/.ssh/svc-github.com" ]]
+}
+
 @test "provision: explicit subcommand behaves the same" {
   provision_mocks
   run bash "$BOOTSTRAP" provision
