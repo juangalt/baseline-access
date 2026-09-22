@@ -277,12 +277,20 @@ save_github_key() {
   # `mv` onto a directory moves the file INTO it and succeeds; refuse instead
   # (`mv -T` would do it, but is GNU-only and this also runs on macOS).
   [[ ! -d "$GITHUB_KEY_FILE" ]] || die "$GITHUB_KEY_FILE is a directory — remove it and re-run"
-  local tmp
-  tmp=$(mktemp "$HOME/.ssh/.svc-github.com.XXXXXX")
-  # On a failed write or rename (disk full, …) remove the temp copy rather
-  # than leave key material in a stray file.
-  if ! { printf '%s\n' "$key" > "$tmp" && mv -f "$tmp" "$GITHUB_KEY_FILE"; }; then
-    rm -f "$tmp"
+  # Never leave key material in a stray temp file. The write runs in a subshell
+  # whose own handlers remove the temp file on ANY exit — failed write/rename,
+  # Ctrl-C, SIGTERM — without touching the caller's handlers. Installed before
+  # mktemp so no window is uncovered; after a successful rename the path no
+  # longer exists and the rm is a no-op.
+  if ! (
+    tmp=""
+    trap 'rm -f "$tmp"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    tmp=$(mktemp "$HOME/.ssh/.svc-github.com.XXXXXX")
+    printf '%s\n' "$key" > "$tmp"
+    mv -f "$tmp" "$GITHUB_KEY_FILE"
+  ); then
     die "Failed to write $GITHUB_KEY_FILE"
   fi
   ok "GitHub SSH key saved to ~/.ssh/svc-github.com"

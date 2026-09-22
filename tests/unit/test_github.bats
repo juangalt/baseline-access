@@ -125,6 +125,44 @@ setup() {
   [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
 }
 
+@test "save_github_key: SIGTERM mid-write removes the temp file" {
+  # Pre-fix, only a failed write/rename cleaned up; a signal between mktemp and
+  # the rename left key material in ~/.ssh/.svc-github.com.*.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  # A slow mv holds the window open; the temp file exists while it sleeps.
+  printf '#!/usr/bin/env bash\nsleep 1\n' > "$MOCK_BIN/mv"
+  chmod +x "$MOCK_BIN/mv"
+  # Own process group, so the signal reaches every process — as Ctrl-C does.
+  setsid bash -c "source <(head -n -1 '$BOOTSTRAP'); save_github_key" >/dev/null 2>&1 3>&- &
+  local pid=$! i
+  for i in $(seq 50); do
+    [[ -n "$(find "$HOME/.ssh" -name '.svc-github.com.*' 2>/dev/null)" ]] && break
+    sleep 0.1
+  done
+  [[ -n "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
+  kill -TERM -- "-$pid"
+  local rc=0
+  wait "$pid" || rc=$?
+  [[ "$rc" -ne 0 ]]
+  for i in $(seq 30); do
+    [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]] && break
+    sleep 0.1
+  done
+  [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
+  [[ ! -e "$HOME/.ssh/svc-github.com" ]]
+}
+
+@test "save_github_key: restores a caller's existing exit handler" {
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  run bash -c "source <(head -n -1 '$BOOTSTRAP'); trap 'echo caller-handler' EXIT; save_github_key >/dev/null; trap -p EXIT"
+  assert_success
+  assert_output --partial "echo caller-handler"
+}
+
 @test "save_github_key: refuses a directory at the key path" {
   # `mv` onto a directory moves the key INTO it and succeeds.
   mock_bw_status unlocked
