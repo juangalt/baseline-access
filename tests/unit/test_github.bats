@@ -113,6 +113,30 @@ setup() {
   [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
 }
 
+@test "save_github_key: removes the temp file when the rename fails" {
+  # Pre-fix, a failed write/rename left key material in ~/.ssh/.svc-github.com.*.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_cmd mv 1
+  run save_github_key
+  assert_failure
+  assert_output --partial "Failed to write"
+  [[ -z "$(find "$HOME/.ssh" -name '.svc-github.com.*')" ]]
+}
+
+@test "save_github_key: refuses a directory at the key path" {
+  # `mv` onto a directory moves the key INTO it and succeeds.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mkdir -p "$HOME/.ssh/svc-github.com"
+  run save_github_key
+  assert_failure
+  assert_output --partial "is a directory"
+  [[ -z "$(find "$HOME/.ssh" -mindepth 1 -not -path "$HOME/.ssh/svc-github.com")" ]]
+}
+
 @test "save_github_key: creates ~/.ssh if missing" {
   mock_bw_status unlocked
   mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
@@ -215,6 +239,28 @@ setup() {
   assert_success
   refute_output --partial "SSH config updated"
   assert_output --partial "Another IdentityFile is tried before"
+}
+
+@test "ssh_config_has_github / key_first: our key reached through a symlinked home counts" {
+  # Bluefin: $HOME is /var/home/<user>, /home -> /var/home, so a config naming
+  # /home/<user>/.ssh/svc-github.com is the same file under another path.
+  mkdir -p "$HOME/.ssh"
+  : > "$HOME/.ssh/svc-github.com"
+  ln -s "$HOME" "$BATS_TEST_TMPDIR/althome"
+  mock_ssh "path:$BATS_TEST_TMPDIR/althome/.ssh/svc-github.com"
+  run ssh_config_has_github
+  assert_success
+  run ssh_config_github_key_first
+  assert_success
+}
+
+@test "ssh_config_has_github: a different file is not ours, even when both exist" {
+  mkdir -p "$HOME/.ssh"
+  : > "$HOME/.ssh/svc-github.com"
+  : > "$HOME/.ssh/github_personal"
+  mock_ssh "path:$HOME/.ssh/github_personal"
+  run ssh_config_has_github
+  assert_failure
 }
 
 @test "ssh_config_github_key_first: true only when our key is listed first" {

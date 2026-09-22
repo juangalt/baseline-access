@@ -11,6 +11,21 @@ It provisions **SSH access only** — no HTTPS credentials are ever set up. See
 Only bootstrap *logic* is public here; every secret stays in Bitwarden behind
 Bitwarden auth and is never committed.
 
+## Prerequisites
+
+`curl`, `jq`, `git` and the OpenSSH client (`ssh`, `ssh-keygen`) must already be
+installed — the script checks for all of them up front and stops before
+Bitwarden login if any is missing. Most distros ship them; on a minimal image:
+
+```bash
+sudo apt install curl jq git openssh-client     # Debian/Ubuntu
+sudo dnf install curl jq git openssh-clients    # Fedora
+sudo pacman -S curl jq git openssh              # Arch
+```
+
+The Bitwarden CLI (`bw`) is the exception: it is not in distro repos, so the
+script installs it itself via brew, npm or snap.
+
 ## Quick start (clone-then-run — canonical)
 
 A fresh machine can clone this public repo over **HTTPS with no key**, and you can
@@ -165,8 +180,8 @@ this public repo.
 
 ## What it does
 
-1. Ensures `bw` + `jq` are present (installs the Bitwarden CLI via brew / npm /
-   snap if absent), then `bw login` / `bw unlock` interactively.
+1. Checks the [prerequisites](#prerequisites), installs the Bitwarden CLI via
+   brew / npm / snap if absent, then `bw login` / `bw unlock` interactively.
 2. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600,
    replacing any existing file rather than inheriting its permissions).
 3. Ensures the `github.com` stanza in `~/.ssh/config` (with `IdentitiesOnly yes`,

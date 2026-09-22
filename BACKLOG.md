@@ -1,9 +1,26 @@
 # baseline-access backlog
-<!-- next-id: 7 -->
+<!-- next-id: 8 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-7 — minor hardening from the repo review — **done**
+
+- **Missing tools found halfway.** `jq`/`curl` were not installed or listed as
+  prerequisites, and `curl`/`ssh-keygen` were only checked after Bitwarden login
+  and the key write. Without `ssh`, `ssh_config_has_github` reported "not
+  covered", so every re-run appended another stanza before dying. **Fix:**
+  `preflight` checks `curl jq git ssh ssh-keygen` before login and dies listing
+  all missing tools; the README gains a Prerequisites section.
+- **Temp key file leaked** on a failed write/rename. **Fix:** removed before
+  dying. Also: `mv` onto a *directory* at the key path moved the key into it and
+  "succeeded" — now refused (`mv -T` is GNU-only; this runs on macOS too).
+- **Bluefin path mismatch.** `$HOME` is `/var/home/<user>` with `/home` a
+  symlink, so a config naming `/home/<user>/.ssh/svc-github.com` did not match
+  and a duplicate stanza was added. **Fix:** also accept the same file via
+  `-ef` (device + inode).
+- `.claude/worktrees/` added to `.gitignore`.
 
 ### B-6 — half-set git identity overwritten by env var — **done**
 

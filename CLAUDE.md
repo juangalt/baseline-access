@@ -103,7 +103,12 @@ git identity → verify → next-step.
   than `ssh-keyscan`, which trusts whatever answers on port 22. Needs `curl`.
 - **Key file replaced, not truncated**: the key goes to a `mktemp` file (0600)
   renamed over `~/.ssh/svc-github.com`, so a pre-existing wider mode or symlink
-  never carries over.
+  never carries over. A failed write/rename removes the temp file; a directory
+  at the key path is refused (`mv` would move the key *into* it).
+- **Preflight**: `provision` checks `curl jq git ssh ssh-keygen` before
+  Bitwarden login and dies listing every missing one; only `bw` is installed
+  by the script. Key-path matching also accepts the same file by another path
+  (`-ef`), e.g. Bluefin's `/home` → `/var/home` symlink.
 - **Self-contained**: it does not clone/run any machine-class bootstrap, touch
   dotfiles/packages/dconf beyond git config, set hostname, or manage fleet policy.
 - It keeps an **independent copy** of the Bitwarden login + key-fetch logic that
