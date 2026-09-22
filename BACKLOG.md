@@ -27,6 +27,15 @@ lacks it — earlier versions of this script, or fleet-control's — gets a warn
 instead of a rewrite, since it may be managed elsewhere. Verify now prints the
 account name from the banner.
 
+PR review follow-up: appending is not sufficient. ssh keeps the first
+`IdentitiesOnly` value it sees (an earlier `Host *` with `no` overrides ours),
+and IdentityFiles accumulate in file order — `IdentitiesOnly` filters agent
+keys, not configured files — so an earlier `Host github.com` block naming a
+personal key is still tried first. Both confirmed with `ssh -G`. After the
+stanza step the resolved config is now always checked, warning if
+`IdentitiesOnly` resolves `no` or `~/.ssh/svc-github.com` is not the first
+IdentityFile.
+
 ### B-4 — any "github"-named key counted as github.com coverage — **done**
 
 `ssh_config_has_github` matched `^identityfile.*github` in `ssh -G github.com`,

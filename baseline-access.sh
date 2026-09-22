@@ -183,11 +183,10 @@ bw_login_or_unlock() {
 #
 # Only an exact path match counts. Any other "github"-named key (say
 # ~/.ssh/github_personal) says nothing about the key just fetched, and treating
-# it as coverage skipped the stanza and left that key unused. Adding our stanza
-# alongside theirs is harmless: IdentityFile accumulates across matching blocks.
-#
-# `ssh -G` prints paths as written, unexpanded, so the home-directory forms
-# ssh itself expands (~/, %d/, ${HOME}/) are resolved before comparing.
+# it as coverage skipped the stanza and left that key unused. Our stanza is
+# then added alongside theirs; IdentityFile accumulates across matching blocks,
+# but in file order — so theirs may still be tried first (see
+# ssh_config_github_key_first).
 #
 # Deliberately does NOT also check a
 # `github` alias: this script's own contract (CLAUDE.md "SSH only") is that
@@ -198,6 +197,17 @@ bw_login_or_unlock() {
 # unrouted while this function reported false coverage.
 ssh_config_has_github() {
   have ssh || return 1
+  local path
+  while IFS= read -r path; do
+    [[ "$path" == "$GITHUB_KEY_FILE" ]] && return 0
+  done < <(github_identity_files)
+  return 1
+}
+
+# Print the IdentityFiles `ssh -G github.com` resolves, in the order ssh tries
+# them, one per line. `ssh -G` prints paths as written, unexpanded, so the
+# home-directory forms ssh itself expands (~/, %d/, ${HOME}/) are resolved here.
+github_identity_files() {
   local opt path
   # `ssh -G` prints option names lowercased; `read` keeps any spaces in the path.
   while read -r opt path; do
@@ -207,9 +217,20 @@ ssh_config_has_github() {
       '%d/'*)      path="$HOME/${path#%d/}" ;;
       '${HOME}/'*) path="$HOME/${path#\$\{HOME\}/}" ;;
     esac
-    [[ "$path" == "$GITHUB_KEY_FILE" ]] && return 0
+    printf '%s\n' "$path"
   done < <(ssh -G github.com 2>/dev/null)
-  return 1
+}
+
+# True when $GITHUB_KEY_FILE is the FIRST IdentityFile ssh resolves for
+# github.com. Blocks accumulate IdentityFiles in file order, and IdentitiesOnly
+# filters only agent keys, not configured files — so an earlier
+# `Host github.com` block naming a personal key is still tried first and
+# authenticates as that account.
+ssh_config_github_key_first() {
+  have ssh || return 1
+  local first
+  first=$(github_identity_files | head -n1)
+  [[ "$first" == "$GITHUB_KEY_FILE" ]]
 }
 
 # True when resolved SSH config for github.com sets `IdentitiesOnly yes`.
@@ -252,12 +273,21 @@ save_github_key() {
   if ! ssh_config_has_github; then
     (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n  IdentitiesOnly yes\n' >> "$ssh_config")
     ok "SSH config updated for github.com"
-  elif ! ssh_config_github_identities_only; then
-    # An existing block (ours from an earlier version, or fleet-control's) maps
-    # the key but not IdentitiesOnly. Warn rather than rewrite a config that
-    # may be managed by something else.
-    warn "github.com SSH config lacks 'IdentitiesOnly yes' — ssh-agent keys are offered first"
-    dim "and may authenticate as a different GitHub account. Add it to the github.com block."
+  fi
+
+  # Check what ssh actually resolves, whether or not we just appended: ssh keeps
+  # the FIRST value it sees for IdentitiesOnly, so an earlier block (`Host *`,
+  # an older stanza of ours, fleet-control's) can override ours, and an earlier
+  # IdentityFile is tried before ours. Warn rather than rewrite a config that may
+  # be managed by something else.
+  if ! ssh_config_github_identities_only; then
+    warn "github.com resolves 'IdentitiesOnly no' — ssh-agent keys are offered first"
+    dim "and may authenticate as a different GitHub account. Set 'IdentitiesOnly yes' in"
+    dim "the first ~/.ssh/config block matching github.com."
+  fi
+  if ! ssh_config_github_key_first; then
+    warn "Another IdentityFile is tried before ~/.ssh/svc-github.com for github.com"
+    dim "and may authenticate as a different GitHub account. Check: ssh -G github.com"
   fi
 }
 

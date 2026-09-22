@@ -173,6 +173,7 @@ setup() {
   assert_success
   refute_output --partial "SSH config updated"
   refute_output --partial "IdentitiesOnly"
+  refute_output --partial "Another IdentityFile"
 }
 
 @test "save_github_key: warns when existing github.com block lacks IdentitiesOnly" {
@@ -186,8 +187,43 @@ setup() {
   run save_github_key
   assert_success
   refute_output --partial "SSH config updated"
-  assert_output --partial "lacks 'IdentitiesOnly yes'"
+  assert_output --partial "resolves 'IdentitiesOnly no'"
   [[ ! -e "$HOME/.ssh/config" ]]
+}
+
+@test "save_github_key: warns when IdentitiesOnly still resolves no after appending" {
+  # ssh keeps the FIRST IdentitiesOnly it sees, so an earlier `Host *` with
+  # `IdentitiesOnly no` overrides the `yes` in our appended stanza.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh none authed no
+  run save_github_key
+  assert_success
+  assert_output --partial "SSH config updated"
+  assert_output --partial "resolves 'IdentitiesOnly no'"
+}
+
+@test "save_github_key: warns when another IdentityFile is tried before ours" {
+  # IdentityFiles accumulate in file order and IdentitiesOnly does not filter
+  # configured files, so an earlier github.com block's personal key wins.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh 'path:~/.ssh/github_personal|~/.ssh/svc-github.com'
+  run save_github_key
+  assert_success
+  refute_output --partial "SSH config updated"
+  assert_output --partial "Another IdentityFile is tried before"
+}
+
+@test "ssh_config_github_key_first: true only when our key is listed first" {
+  mock_ssh 'path:~/.ssh/svc-github.com|~/.ssh/github_personal'
+  run ssh_config_github_key_first
+  assert_success
+  mock_ssh 'path:~/.ssh/github_personal|~/.ssh/svc-github.com'
+  run ssh_config_github_key_first
+  assert_failure
 }
 
 @test "save_github_key: adds github.com stanza when github.com uses a different github-named key" {

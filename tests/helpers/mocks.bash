@@ -109,6 +109,8 @@ mock_jq_dispatch() {
 #              an alias without covering the literal host.
 #     path:P — github.com → IdentityFile P, printed verbatim (unexpanded, as
 #              the real `ssh -G` does), e.g. path:~/.ssh/github_personal.
+#              P may be several paths joined by `|`, printed in that order
+#              (the order ssh tries them), e.g. path:~/.ssh/a|~/.ssh/b.
 #   VERIFY_BANNER (drives `ssh -T`, optional):
 #     authed   — emit the "successfully authenticated" banner (default)
 #     denied   — emit a permission-denied banner
@@ -134,7 +136,11 @@ mock_ssh() {
     printf '#!/usr/bin/env bash\n'
     printf 'if [[ "$1" == "-G" ]]; then\n'
     printf '  case "$2" in\n'
-    printf '    github.com) printf "identityfile %%s\\nidentitiesonly %%s\\n" %q %q ;;\n' "$id_github_com" "$idonly"
+    local -a ids
+    IFS='|' read -r -a ids <<<"$id_github_com"
+    printf '    github.com) printf "identityfile %%s\\n"'
+    printf ' %q' "${ids[@]}"
+    printf '; printf "identitiesonly %%s\\n" %q ;;\n' "$idonly"
     printf '    github)     printf "identityfile %%s\\n" %q ;;\n' "$id_github_alias"
     printf '    *)          printf "identityfile ~/.ssh/id_rsa\\n" ;;\n'
     printf '  esac\n'
