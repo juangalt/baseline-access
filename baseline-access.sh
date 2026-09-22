@@ -228,8 +228,10 @@ github_identity_files() {
 # authenticates as that account.
 ssh_config_github_key_first() {
   have ssh || return 1
-  local first
-  first=$(github_identity_files | head -n1)
+  local first=""
+  # `read` from a process substitution, not `| head -n1`: no pipeline, so no
+  # pipefail/SIGPIPE when the reader stops after one line.
+  IFS= read -r first < <(github_identity_files) || true
   [[ "$first" == "$GITHUB_KEY_FILE" ]]
 }
 
@@ -239,7 +241,11 @@ ssh_config_github_key_first() {
 # account — git works, the verify banner says "Hi", but as the wrong user.
 ssh_config_github_identities_only() {
   have ssh || return 1
-  ssh -G github.com 2>/dev/null | grep -qx 'identitiesonly yes'
+  # Capture first: `ssh -G | grep -q` lets grep exit early, and under pipefail
+  # ssh's SIGPIPE on its next write would turn a match into a failure (cf. B-1).
+  local out
+  out=$(ssh -G github.com 2>/dev/null) || true
+  grep -qx 'identitiesonly yes' <<<"$out"
 }
 
 save_github_key() {
