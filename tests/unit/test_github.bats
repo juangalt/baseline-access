@@ -160,6 +160,7 @@ setup() {
   [[ -f "$HOME/.ssh/config" ]]
   grep -q "Host github.com" "$HOME/.ssh/config"
   grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
+  grep -q "IdentitiesOnly yes" "$HOME/.ssh/config"
   [[ "$(stat -c '%a' "$HOME/.ssh/config")" == "600" ]]
 }
 
@@ -171,6 +172,22 @@ setup() {
   run save_github_key
   assert_success
   refute_output --partial "SSH config updated"
+  refute_output --partial "IdentitiesOnly"
+}
+
+@test "save_github_key: warns when existing github.com block lacks IdentitiesOnly" {
+  # Without IdentitiesOnly, ssh offers agent keys first, so a personal key in
+  # the agent authenticates as the wrong account. The block may be managed by
+  # something else (fleet-control), so it is flagged, not rewritten.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh direct authed no
+  run save_github_key
+  assert_success
+  refute_output --partial "SSH config updated"
+  assert_output --partial "lacks 'IdentitiesOnly yes'"
+  [[ ! -e "$HOME/.ssh/config" ]]
 }
 
 @test "save_github_key: adds github.com stanza when github.com uses a different github-named key" {

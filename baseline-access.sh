@@ -212,6 +212,15 @@ ssh_config_has_github() {
   return 1
 }
 
+# True when resolved SSH config for github.com sets `IdentitiesOnly yes`.
+# Without it, ssh offers every ssh-agent key BEFORE the configured
+# IdentityFile, so an agent holding a personal GitHub key authenticates as that
+# account — git works, the verify banner says "Hi", but as the wrong user.
+ssh_config_github_identities_only() {
+  have ssh || return 1
+  ssh -G github.com 2>/dev/null | grep -qx 'identitiesonly yes'
+}
+
 save_github_key() {
   require bw
   require jq
@@ -236,11 +245,19 @@ save_github_key() {
   mv -f "$tmp" "$GITHUB_KEY_FILE"
   ok "GitHub SSH key saved to ~/.ssh/svc-github.com"
 
-  # Ensure SSH uses this key for github.com without needing ssh-agent.
+  # Ensure SSH uses this key — and only this key — for github.com, without
+  # needing ssh-agent. IdentitiesOnly keeps agent keys from being offered first
+  # (see ssh_config_github_identities_only).
   local ssh_config="$HOME/.ssh/config"
   if ! ssh_config_has_github; then
-    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n' >> "$ssh_config")
+    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n  IdentitiesOnly yes\n' >> "$ssh_config")
     ok "SSH config updated for github.com"
+  elif ! ssh_config_github_identities_only; then
+    # An existing block (ours from an earlier version, or fleet-control's) maps
+    # the key but not IdentitiesOnly. Warn rather than rewrite a config that
+    # may be managed by something else.
+    warn "github.com SSH config lacks 'IdentitiesOnly yes' — ssh-agent keys are offered first"
+    dim "and may authenticate as a different GitHub account. Add it to the github.com block."
   fi
 }
 
@@ -322,8 +339,10 @@ configure_git_identity() {
     return 0
   fi
 
-  local name="${GIT_IDENTITY_NAME:-$cur_name}"
-  local email="${GIT_IDENTITY_EMAIL:-$cur_email}"
+  # An already-set value wins over the env var: a half-configured identity gets
+  # only its missing half filled, never the existing half overwritten.
+  local name="${cur_name:-${GIT_IDENTITY_NAME:-}}"
+  local email="${cur_email:-${GIT_IDENTITY_EMAIL:-}}"
 
   # Only hint when we are actually about to prompt (the unattended path is silent).
   if [[ -z "$name" || -z "$email" ]]; then
@@ -339,8 +358,8 @@ configure_git_identity() {
   [[ -n "$name"  ]] || die "git user.name not provided (set GIT_IDENTITY_NAME or answer the prompt)"
   [[ -n "$email" ]] || die "git user.email not provided (set GIT_IDENTITY_EMAIL or answer the prompt)"
 
-  git config --global user.name  "$name"
-  git config --global user.email "$email"
+  [[ -n "$cur_name"  ]] || git config --global user.name  "$name"
+  [[ -n "$cur_email" ]] || git config --global user.email "$email"
   ok "Git identity configured ($name <$email>)"
 }
 
@@ -355,7 +374,10 @@ verify_github_auth() {
   local out
   out=$(ssh -T -o StrictHostKeyChecking=accept-new git@github.com 2>&1 || true)
   if grep -qi 'successfully authenticated' <<<"$out"; then
-    ok "GitHub authentication succeeded"
+    # Name the account: a wrong one means some other key answered for github.com.
+    local user="" re='Hi ([^!]+)!'
+    [[ "$out" =~ $re ]] && user="${BASH_REMATCH[1]}"
+    ok "GitHub authentication succeeded${user:+ as ${user}}"
     return 0
   fi
   warn "Could not confirm GitHub authentication"

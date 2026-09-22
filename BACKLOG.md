@@ -1,9 +1,31 @@
 # baseline-access backlog
-<!-- next-id: 5 -->
+<!-- next-id: 7 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-6 — half-set git identity overwritten by env var — **done**
+
+`configure_git_identity` took `${GIT_IDENTITY_NAME:-$cur_name}`, so with
+`user.name` already set but `user.email` missing, `GIT_IDENTITY_NAME` replaced
+the existing name — contrary to the "never clobbers" contract.
+
+**Fix:** existing values win (`${cur_name:-${GIT_IDENTITY_NAME:-}}`) and only
+the missing key is written. Regression test fails pre-fix, passes after.
+
+### B-5 — agent keys offered before svc-github.com; wrong account possible — **done**
+
+The stanza was `IdentityFile` only. ssh offers ssh-agent keys *before* an
+IdentityFile that is not in the agent (confirmed with `ssh -v`, OpenSSH 10.5),
+so an agent holding a personal GitHub key authenticated as that account while
+verify, matching only "successfully authenticated", reported success.
+
+**Fix:** the stanza adds `IdentitiesOnly yes` (checked with `ssh -v`: the agent
+key is no longer offered). An existing block that already maps our key but
+lacks it — earlier versions of this script, or fleet-control's — gets a warning
+instead of a rewrite, since it may be managed elsewhere. Verify now prints the
+account name from the banner.
 
 ### B-4 — any "github"-named key counted as github.com coverage — **done**
 

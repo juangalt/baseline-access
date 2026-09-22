@@ -16,7 +16,7 @@ setup() {
   mock_ssh none authed
   run verify_github_auth
   assert_success
-  assert_output --partial "GitHub authentication succeeded"
+  assert_output --partial "GitHub authentication succeeded as juangalt"
 }
 
 @test "verify_github_auth: reports failure when banner absent" {
