@@ -99,7 +99,7 @@ mock_jq_dispatch() {
 
 # Write an ssh mock responding to `ssh -G <host>` (config detection) and
 # `ssh -T git@github.com` (auth verification).
-# Usage: mock_ssh MODE [VERIFY_BANNER]
+# Usage: mock_ssh MODE [VERIFY_BANNER] [IDENTITIES_ONLY]
 #   MODE (github config presence, drives `ssh -G`):
 #     direct — github.com → IdentityFile ~/.ssh/svc-github.com
 #     none   — no github-specific config (only default keys)
@@ -107,16 +107,23 @@ mock_jq_dispatch() {
 #              key (e.g. ~/.ssh/svc-github); github.com itself stays
 #              unrouted. Simulates another tool (fleet-control) provisioning
 #              an alias without covering the literal host.
+#     path:P — github.com → IdentityFile P, printed verbatim (unexpanded, as
+#              the real `ssh -G` does), e.g. path:~/.ssh/github_personal.
+#              P may be several paths joined by `|`, printed in that order
+#              (the order ssh tries them), e.g. path:~/.ssh/a|~/.ssh/b.
 #   VERIFY_BANNER (drives `ssh -T`, optional):
 #     authed   — emit the "successfully authenticated" banner (default)
 #     denied   — emit a permission-denied banner
+#   IDENTITIES_ONLY (github.com's `identitiesonly` in `ssh -G`, optional):
+#     yes (default) | no
 mock_ssh() {
-  local mode="${1:-none}" verify="${2:-authed}"
+  local mode="${1:-none}" verify="${2:-authed}" idonly="${3:-yes}"
   local id_github_com id_github_alias
   case "$mode" in
     direct) id_github_com="~/.ssh/svc-github.com";  id_github_alias="~/.ssh/id_rsa" ;;
     none)   id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/id_rsa" ;;
     alias)  id_github_com="~/.ssh/id_rsa";  id_github_alias="~/.ssh/svc-github" ;;
+    path:*) id_github_com="${mode#path:}";  id_github_alias="~/.ssh/id_rsa" ;;
     *) printf 'mock_ssh: unknown mode %s\n' "$mode" >&2; return 1 ;;
   esac
   local banner
@@ -129,7 +136,11 @@ mock_ssh() {
     printf '#!/usr/bin/env bash\n'
     printf 'if [[ "$1" == "-G" ]]; then\n'
     printf '  case "$2" in\n'
-    printf '    github.com) printf "identityfile %%s\\n" %q ;;\n' "$id_github_com"
+    local -a ids
+    IFS='|' read -r -a ids <<<"$id_github_com"
+    printf '    github.com) printf "identityfile %%s\\n"'
+    printf ' %q' "${ids[@]}"
+    printf '; printf "identitiesonly %%s\\n" %q ;;\n' "$idonly"
     printf '    github)     printf "identityfile %%s\\n" %q ;;\n' "$id_github_alias"
     printf '    *)          printf "identityfile ~/.ssh/id_rsa\\n" ;;\n'
     printf '  esac\n'

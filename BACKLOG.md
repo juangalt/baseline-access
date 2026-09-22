@@ -1,9 +1,52 @@
 # baseline-access backlog
-<!-- next-id: 4 -->
+<!-- next-id: 7 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-6 — half-set git identity overwritten by env var — **done**
+
+`configure_git_identity` took `${GIT_IDENTITY_NAME:-$cur_name}`, so with
+`user.name` already set but `user.email` missing, `GIT_IDENTITY_NAME` replaced
+the existing name — contrary to the "never clobbers" contract.
+
+**Fix:** existing values win (`${cur_name:-${GIT_IDENTITY_NAME:-}}`) and only
+the missing key is written. Regression test fails pre-fix, passes after.
+
+### B-5 — agent keys offered before svc-github.com; wrong account possible — **done**
+
+The stanza was `IdentityFile` only. ssh offers ssh-agent keys *before* an
+IdentityFile that is not in the agent (confirmed with `ssh -v`, OpenSSH 10.5),
+so an agent holding a personal GitHub key authenticated as that account while
+verify, matching only "successfully authenticated", reported success.
+
+**Fix:** the stanza adds `IdentitiesOnly yes` (checked with `ssh -v`: the agent
+key is no longer offered). An existing block that already maps our key but
+lacks it — earlier versions of this script, or fleet-control's — gets a warning
+instead of a rewrite, since it may be managed elsewhere. Verify now prints the
+account name from the banner.
+
+PR review follow-up: appending is not sufficient. ssh keeps the first
+`IdentitiesOnly` value it sees (an earlier `Host *` with `no` overrides ours),
+and IdentityFiles accumulate in file order — `IdentitiesOnly` filters agent
+keys, not configured files — so an earlier `Host github.com` block naming a
+personal key is still tried first. Both confirmed with `ssh -G`. After the
+stanza step the resolved config is now always checked, warning if
+`IdentitiesOnly` resolves `no` or `~/.ssh/svc-github.com` is not the first
+IdentityFile.
+
+### B-4 — any "github"-named key counted as github.com coverage — **done**
+
+`ssh_config_has_github` matched `^identityfile.*github` in `ssh -G github.com`,
+so an unrelated key such as `~/.ssh/github_personal` made `save_github_key` skip
+its `Host github.com` stanza, and the key it had just fetched was never offered.
+
+**Fix:** only an exact match on `~/.ssh/svc-github.com` counts. `ssh -G` prints
+paths unexpanded, so `~/`, `%d/` and `${HOME}/` are resolved first. Checked
+against real `ssh -G` output for each form, plus `github_personal` and a
+`svc-github.com.bak` lookalike (both correctly not covered). Appending our
+stanza next to another github.com key is harmless: `IdentityFile` accumulates.
 
 ### B-3 — known_hosts not idempotent when hashed, trusted on first use; key mode inherited — **done**
 

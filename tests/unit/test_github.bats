@@ -160,6 +160,7 @@ setup() {
   [[ -f "$HOME/.ssh/config" ]]
   grep -q "Host github.com" "$HOME/.ssh/config"
   grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
+  grep -q "IdentitiesOnly yes" "$HOME/.ssh/config"
   [[ "$(stat -c '%a' "$HOME/.ssh/config")" == "600" ]]
 }
 
@@ -171,6 +172,115 @@ setup() {
   run save_github_key
   assert_success
   refute_output --partial "SSH config updated"
+  refute_output --partial "IdentitiesOnly"
+  refute_output --partial "Another IdentityFile"
+}
+
+@test "save_github_key: warns when existing github.com block lacks IdentitiesOnly" {
+  # Without IdentitiesOnly, ssh offers agent keys first, so a personal key in
+  # the agent authenticates as the wrong account. The block may be managed by
+  # something else (fleet-control), so it is flagged, not rewritten.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh direct authed no
+  run save_github_key
+  assert_success
+  refute_output --partial "SSH config updated"
+  assert_output --partial "resolves 'IdentitiesOnly no'"
+  [[ ! -e "$HOME/.ssh/config" ]]
+}
+
+@test "save_github_key: warns when IdentitiesOnly still resolves no after appending" {
+  # ssh keeps the FIRST IdentitiesOnly it sees, so an earlier `Host *` with
+  # `IdentitiesOnly no` overrides the `yes` in our appended stanza.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh none authed no
+  run save_github_key
+  assert_success
+  assert_output --partial "SSH config updated"
+  assert_output --partial "resolves 'IdentitiesOnly no'"
+}
+
+@test "save_github_key: warns when another IdentityFile is tried before ours" {
+  # IdentityFiles accumulate in file order and IdentitiesOnly does not filter
+  # configured files, so an earlier github.com block's personal key wins.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh 'path:~/.ssh/github_personal|~/.ssh/svc-github.com'
+  run save_github_key
+  assert_success
+  refute_output --partial "SSH config updated"
+  assert_output --partial "Another IdentityFile is tried before"
+}
+
+@test "ssh_config_github_key_first: true only when our key is listed first" {
+  mock_ssh 'path:~/.ssh/svc-github.com|~/.ssh/github_personal'
+  run ssh_config_github_key_first
+  assert_success
+  mock_ssh 'path:~/.ssh/github_personal|~/.ssh/svc-github.com'
+  run ssh_config_github_key_first
+  assert_failure
+}
+
+@test "save_github_key: adds github.com stanza when github.com uses a different github-named key" {
+  # Regression: any IdentityFile containing "github" used to count as coverage,
+  # so a personal key like ~/.ssh/github_personal skipped the stanza and the key
+  # just fetched was never offered.
+  mock_bw_status unlocked
+  mock_jq_value "-----BEGIN OPENSSH PRIVATE KEY-----"
+  export BW_SESSION="fake"
+  mock_ssh 'path:~/.ssh/github_personal'
+  run save_github_key
+  assert_success
+  assert_output --partial "SSH config updated"
+  grep -q "IdentityFile ~/.ssh/svc-github.com" "$HOME/.ssh/config"
+}
+
+# ── ssh_config_has_github: exact-path match ───────────────────────────────────
+
+@test "ssh_config_has_github: true for ~/.ssh/svc-github.com" {
+  mock_ssh 'path:~/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: true for the absolute path" {
+  mock_ssh "path:$HOME/.ssh/svc-github.com"
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: true for the %d and \${HOME} forms ssh expands" {
+  mock_ssh 'path:%d/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+  mock_ssh 'path:${HOME}/.ssh/svc-github.com'
+  run ssh_config_has_github
+  assert_success
+}
+
+@test "ssh_config_has_github: false for another github-named key" {
+  mock_ssh 'path:~/.ssh/github_personal'
+  run ssh_config_has_github
+  assert_failure
+}
+
+@test "ssh_config_has_github: false for a path that merely starts with ours" {
+  mock_ssh 'path:~/.ssh/svc-github.com.bak'
+  run ssh_config_has_github
+  assert_failure
+}
+
+@test "ssh_config_has_github: false when ssh is absent" {
+  rm -f "$MOCK_BIN/ssh"
+  only_mocks_on_path
+  run ssh_config_has_github
+  restore_path
+  assert_failure
 }
 
 @test "save_github_key: adds github.com stanza even when a 'github' alias (not github.com) already resolves to a github-named key" {

@@ -46,6 +46,21 @@ setup() {
   ! grep -q 'Should Not Win' "$BATS_TEST_TMPDIR/git.calls"
 }
 
+@test "configure_git_identity: fills only the missing half, never overwrites the set one" {
+  # Regression: GIT_IDENTITY_NAME used to override an already-set user.name
+  # when only user.email was missing.
+  mock_git_identity
+  printf 'user.name=%s\n' "Existing Name" >> "$BATS_TEST_TMPDIR/gitconfig.store"
+  export GIT_IDENTITY_NAME="Should Not Win"
+  export GIT_IDENTITY_EMAIL="new@example.com"
+  run configure_git_identity
+  assert_success
+  assert_output --partial "Git identity configured (Existing Name <new@example.com>)"
+  ! grep -q 'Should Not Win' "$BATS_TEST_TMPDIR/git.calls"
+  ! grep -q 'config --global user.name Existing Name' "$BATS_TEST_TMPDIR/git.calls"
+  grep -q 'config --global user.email new@example.com' "$BATS_TEST_TMPDIR/git.calls"
+}
+
 @test "configure_git_identity: dies when name unavailable and non-interactive" {
   mock_git_identity
   export GIT_IDENTITY_EMAIL="test@example.com"

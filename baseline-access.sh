@@ -176,9 +176,19 @@ bw_login_or_unlock() {
 
 # ── GitHub key ────────────────────────────────────────────────────────────────
 
-# True when resolved SSH config already maps the LITERAL github.com host to an
-# IdentityFile whose path contains "github". Uses `ssh -G` so Include
-# directives and wildcards are honoured. Deliberately does NOT also check a
+# True when resolved SSH config already maps the LITERAL github.com host to
+# THIS script's key, $GITHUB_KEY_FILE. Uses `ssh -G` so Include directives and
+# wildcards are honoured — fleet-control's rendered block satisfies it, since it
+# points at the same file.
+#
+# Only an exact path match counts. Any other "github"-named key (say
+# ~/.ssh/github_personal) says nothing about the key just fetched, and treating
+# it as coverage skipped the stanza and left that key unused. Our stanza is
+# then added alongside theirs; IdentityFile accumulates across matching blocks,
+# but in file order — so theirs may still be tried first (see
+# ssh_config_github_key_first).
+#
+# Deliberately does NOT also check a
 # `github` alias: this script's own contract (CLAUDE.md "SSH only") is that
 # plain `git@github.com:` URLs work without relying on any alias or git-level
 # URL rewrite another tool might layer on top. Something else provisioning a
@@ -187,7 +197,55 @@ bw_login_or_unlock() {
 # unrouted while this function reported false coverage.
 ssh_config_has_github() {
   have ssh || return 1
-  ssh -G github.com 2>/dev/null | grep -qi '^identityfile.*github'
+  local path
+  while IFS= read -r path; do
+    [[ "$path" == "$GITHUB_KEY_FILE" ]] && return 0
+  done < <(github_identity_files)
+  return 1
+}
+
+# Print the IdentityFiles `ssh -G github.com` resolves, in the order ssh tries
+# them, one per line. `ssh -G` prints paths as written, unexpanded, so the
+# home-directory forms ssh itself expands (~/, %d/, ${HOME}/) are resolved here.
+github_identity_files() {
+  local opt path
+  # `ssh -G` prints option names lowercased; `read` keeps any spaces in the path.
+  while read -r opt path; do
+    [[ "$opt" == identityfile ]] || continue
+    case "$path" in
+      '~/'*)       path="$HOME/${path#\~/}" ;;
+      '%d/'*)      path="$HOME/${path#%d/}" ;;
+      '${HOME}/'*) path="$HOME/${path#\$\{HOME\}/}" ;;
+    esac
+    printf '%s\n' "$path"
+  done < <(ssh -G github.com 2>/dev/null)
+}
+
+# True when $GITHUB_KEY_FILE is the FIRST IdentityFile ssh resolves for
+# github.com. Blocks accumulate IdentityFiles in file order, and IdentitiesOnly
+# filters only agent keys, not configured files — so an earlier
+# `Host github.com` block naming a personal key is still tried first and
+# authenticates as that account.
+ssh_config_github_key_first() {
+  have ssh || return 1
+  local first=""
+  # `read` from a process substitution, not `| head -n1`: no pipeline, so no
+  # pipefail/SIGPIPE when the reader stops after one line.
+  IFS= read -r first < <(github_identity_files) || true
+  [[ "$first" == "$GITHUB_KEY_FILE" ]]
+}
+
+# True when resolved SSH config for github.com sets `IdentitiesOnly yes`.
+# Without it, ssh offers every ssh-agent key BEFORE the configured
+# IdentityFile, so an agent holding a personal GitHub key authenticates as that
+# account — git works, the verify banner says "Hi", but as the wrong user.
+ssh_config_github_identities_only() {
+  have ssh || return 1
+  # Capture first: `ssh -G | grep -q` lets grep exit early, and under pipefail
+  # ssh's SIGPIPE on its next write would turn a match into a failure (cf. B-1).
+  local out
+  out=$(ssh -G github.com 2>/dev/null) || true
+  grep -qx 'identitiesonly yes' <<<"$out"
 }
 
 save_github_key() {
@@ -214,11 +272,28 @@ save_github_key() {
   mv -f "$tmp" "$GITHUB_KEY_FILE"
   ok "GitHub SSH key saved to ~/.ssh/svc-github.com"
 
-  # Ensure SSH uses this key for github.com without needing ssh-agent.
+  # Ensure SSH uses this key — and only this key — for github.com, without
+  # needing ssh-agent. IdentitiesOnly keeps agent keys from being offered first
+  # (see ssh_config_github_identities_only).
   local ssh_config="$HOME/.ssh/config"
   if ! ssh_config_has_github; then
-    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n' >> "$ssh_config")
+    (umask 077; printf '\nHost github.com\n  IdentityFile ~/.ssh/svc-github.com\n  IdentitiesOnly yes\n' >> "$ssh_config")
     ok "SSH config updated for github.com"
+  fi
+
+  # Check what ssh actually resolves, whether or not we just appended: ssh keeps
+  # the FIRST value it sees for IdentitiesOnly, so an earlier block (`Host *`,
+  # an older stanza of ours, fleet-control's) can override ours, and an earlier
+  # IdentityFile is tried before ours. Warn rather than rewrite a config that may
+  # be managed by something else.
+  if ! ssh_config_github_identities_only; then
+    warn "github.com resolves 'IdentitiesOnly no' — ssh-agent keys are offered first"
+    dim "and may authenticate as a different GitHub account. Set 'IdentitiesOnly yes' in"
+    dim "the first ~/.ssh/config block matching github.com."
+  fi
+  if ! ssh_config_github_key_first; then
+    warn "Another IdentityFile is tried before ~/.ssh/svc-github.com for github.com"
+    dim "and may authenticate as a different GitHub account. Check: ssh -G github.com"
   fi
 }
 
@@ -300,8 +375,10 @@ configure_git_identity() {
     return 0
   fi
 
-  local name="${GIT_IDENTITY_NAME:-$cur_name}"
-  local email="${GIT_IDENTITY_EMAIL:-$cur_email}"
+  # An already-set value wins over the env var: a half-configured identity gets
+  # only its missing half filled, never the existing half overwritten.
+  local name="${cur_name:-${GIT_IDENTITY_NAME:-}}"
+  local email="${cur_email:-${GIT_IDENTITY_EMAIL:-}}"
 
   # Only hint when we are actually about to prompt (the unattended path is silent).
   if [[ -z "$name" || -z "$email" ]]; then
@@ -317,8 +394,8 @@ configure_git_identity() {
   [[ -n "$name"  ]] || die "git user.name not provided (set GIT_IDENTITY_NAME or answer the prompt)"
   [[ -n "$email" ]] || die "git user.email not provided (set GIT_IDENTITY_EMAIL or answer the prompt)"
 
-  git config --global user.name  "$name"
-  git config --global user.email "$email"
+  [[ -n "$cur_name"  ]] || git config --global user.name  "$name"
+  [[ -n "$cur_email" ]] || git config --global user.email "$email"
   ok "Git identity configured ($name <$email>)"
 }
 
@@ -333,7 +410,10 @@ verify_github_auth() {
   local out
   out=$(ssh -T -o StrictHostKeyChecking=accept-new git@github.com 2>&1 || true)
   if grep -qi 'successfully authenticated' <<<"$out"; then
-    ok "GitHub authentication succeeded"
+    # Name the account: a wrong one means some other key answered for github.com.
+    local user="" re='Hi ([^!]+)!'
+    [[ "$out" =~ $re ]] && user="${BASH_REMATCH[1]}"
+    ok "GitHub authentication succeeded${user:+ as ${user}}"
     return 0
   fi
   warn "Could not confirm GitHub authentication"

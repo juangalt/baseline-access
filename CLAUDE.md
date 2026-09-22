@@ -86,7 +86,18 @@ git identity → verify → next-step.
 - **Idempotent**: re-running never duplicates the SSH config stanza or the
   known_hosts entry, and never clobbers an already-configured git identity.
   known_hosts presence is checked per key with `ssh-keygen -F`, so hashed
-  entries (`HashKnownHosts yes`) count.
+  entries (`HashKnownHosts yes`) count. The stanza is skipped only when
+  `ssh -G github.com` already resolves to `~/.ssh/svc-github.com` itself — any
+  other "github"-named key does not count. A half-set identity gets only its
+  missing half filled; an existing value beats `GIT_IDENTITY_*`.
+- **`IdentitiesOnly yes` on the stanza**: without it ssh offers every
+  ssh-agent key *before* the configured file, so an agent holding a personal
+  GitHub key authenticates as that account. Appending is not enough on its own:
+  ssh keeps the *first* `IdentitiesOnly` it sees and tries IdentityFiles in file
+  order, so after the stanza step the resolved `ssh -G github.com` is checked
+  and a warning (never a rewrite — the config may be fleet-control's) is printed
+  if `IdentitiesOnly` resolves `no` or another key file is tried before ours.
+  Verify prints the account the banner names.
 - **Host keys from GitHub's API, not keyscan**: `ensure_known_hosts` pins the
   `.ssh_keys` list from `https://api.github.com/meta` (TLS-authenticated) rather
   than `ssh-keyscan`, which trusts whatever answers on port 22. Needs `curl`.
