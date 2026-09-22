@@ -1,9 +1,22 @@
 # baseline-access backlog
-<!-- next-id: 8 -->
+<!-- next-id: 9 -->
 
 ## Open
 
 ## Done / won't-do
+
+### B-8 — signal mid-write left the temp key file — **done**
+
+B-7 removed the temp file on a failed write/rename, but Ctrl-C or SIGTERM
+between `mktemp` and the rename still left key material in
+`~/.ssh/.svc-github.com.*` (PR#7 review note).
+
+**Fix:** the write runs in a subshell whose own EXIT/INT/TERM handlers remove
+the temp file, installed before `mktemp`. A subshell rather than function-level
+handlers, so the caller's handlers are never replaced — a save/restore attempt
+broke under bats `run`, where `trap -p` in a subshell still reports the parent's
+handlers. Regression test signals the process group mid-`mv`; fails pre-fix,
+10/10 clean after.
 
 ### B-7 — minor hardening from the repo review — **done**
 

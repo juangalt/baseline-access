@@ -8,7 +8,7 @@ related:
   - PR#8
   - tag:v0.3.2
   - tag:v0.3.3
-  - BACKLOG B-4, B-5, B-6, B-7
+  - BACKLOG B-4, B-5, B-6, B-7, B-8
 status: done
 ---
 
@@ -57,6 +57,10 @@ curl one-liner serves the fixes.
   `.claude/worktrees/` gitignored. Review: no findings.
 - PR#8 (`34c92d4`) bumped the README pin; `v0.3.3` tagged on that merge commit.
   Raw URL returns 200 and serves `preflight()`. Suite 83/83.
+- **B-8** (closing, with this devlog): Ctrl-C/SIGTERM between `mktemp` and the
+  rename could still leave the temp key file. The write now runs in a subshell
+  with its own EXIT/INT/TERM cleanup handlers. Suite 85/85; the signal test
+  fails pre-fix and ran 10/10 clean after.
 
 ## Decisions
 - Warn, don't rewrite, when the resolved github.com config is unsafe
@@ -78,10 +82,15 @@ curl one-liner serves the fixes.
 - The first B-5 fix only covered the "stanza skipped" branch; the reviewer
   showed appending is not sufficient on its own. Checking the resolved config
   unconditionally is the real invariant.
+- B-8's first attempt set function-level handlers and saved/restored the
+  caller's. Under bats `run`, `trap -p` inside the subshell still reports the
+  parent's handlers, so restoring re-installed bats' EXIT handler there and
+  failed unrelated tests. A subshell with its own handlers avoids the problem.
 
 ## Open / next
-- Ctrl-C between `mktemp` and `mv` can still leave the temp key file (no
-  `trap`); the directory guard is check-then-act. Both noted on PR#7, not filed.
+- B-8 is on `main` but not in a release: the README still pins `v0.3.3`.
+- The directory guard is check-then-act (only racy with a concurrent writer in
+  `~/.ssh`); noted on PR#7, not filed.
 - `baseline-bluefin` keeps an independent copy of this logic and likely has the
   same stanza without `IdentitiesOnly`; left alone this session by operator
   instruction.
@@ -89,4 +98,4 @@ curl one-liner serves the fixes.
   `IdentitiesOnly yes` — re-running now only warns.
 
 ## Not filed
-- The two PR#7 review notes above (low severity, outside B-7's scope).
+- The directory-guard check-then-act note above (low severity).
