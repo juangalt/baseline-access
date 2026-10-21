@@ -172,6 +172,15 @@ bw_login_or_unlock() {
     export BW_SESSION="$session"
     ok "BW_SESSION exported"
   fi
+
+  # Optional handoff for orchestrators (baseline-setup) that run us as a subprocess:
+  # set BASELINE_ACCESS_SESSION_FILE to a mode-600 path; we write the session there so
+  # the parent can export BW_SESSION for later layers (vault, fleet-add, …). Without
+  # this, the unlock stays trapped in the child and Bitwarden is locked again for apply.
+  if [[ -n "${BASELINE_ACCESS_SESSION_FILE:-}" && -n "${BW_SESSION:-}" ]]; then
+    (umask 077; printf '%s' "$BW_SESSION" >"$BASELINE_ACCESS_SESSION_FILE") \
+      || warn "could not write BW_SESSION handoff to $BASELINE_ACCESS_SESSION_FILE"
+  fi
 }
 
 # ── GitHub key ────────────────────────────────────────────────────────────────

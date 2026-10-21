@@ -133,6 +133,28 @@ setup() {
   assert_output --partial "BW_SESSION exported"
 }
 
+@test "bw_login_or_unlock: writes session to BASELINE_ACCESS_SESSION_FILE when set" {
+  mock_bw_status locked "handoff-session-token"
+  mock_jq_value "locked"
+  local handoff="$BATS_TEST_TMPDIR/bw-session"
+  export BASELINE_ACCESS_SESSION_FILE="$handoff"
+  run bw_login_or_unlock
+  assert_success
+  [ -f "$handoff" ]
+  [ "$(cat "$handoff")" = "handoff-session-token" ]
+}
+
+@test "bw_login_or_unlock: handoff also works when vault already unlocked via BW_SESSION" {
+  mock_bw_status unlocked
+  mock_jq_value "unlocked"
+  export BW_SESSION="existing-token"
+  local handoff="$BATS_TEST_TMPDIR/bw-session"
+  export BASELINE_ACCESS_SESSION_FILE="$handoff"
+  run bw_login_or_unlock
+  assert_success
+  [ "$(cat "$handoff")" = "existing-token" ]
+}
+
 @test "bw_login_or_unlock: refreshes BW_SESSION when vault unlocked but no session" {
   mock_bw_status unlocked
   mock_jq_value "unlocked"
