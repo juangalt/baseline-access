@@ -350,17 +350,34 @@ ensure_known_hosts() {
   local known="$HOME/.ssh/known_hosts"
   (umask 077; mkdir -p "$HOME/.ssh")
 
-  # `||` outside the substitution, as in bw_login_or_unlock: a failing pipeline
-  # must replace the value, not append to it. jq fails on a missing .ssh_keys.
-  local keys
-  keys=$(curl -fsSL "$GITHUB_META_URL" | jq -r '.ssh_keys[]') \
-    || die "Failed to fetch github.com host keys from $GITHUB_META_URL"
-  [[ -n "$keys" ]] || die "GitHub API returned no SSH host keys"
-
-  local present="" key added=0
+  local present=""
   if [[ -f "$known" ]]; then
     present=$(ssh-keygen -F github.com -f "$known" 2>/dev/null) || true
   fi
+
+  # `||` outside the substitution, as in bw_login_or_unlock: a failing pipeline
+  # must replace the value, not append to it. jq fails on a missing .ssh_keys.
+  # Retry a few times — corporate DNS (and Tailscale flaps) often fail once then
+  # succeed. If the API is unreachable but github.com is already pinned, keep
+  # going: re-fetch is for rotation, not a hard dependency on every provision.
+  local keys="" attempt
+  local retry_sleep="${KNOWN_HOSTS_RETRY_SLEEP:-1}"
+  for attempt in 1 2 3; do
+    if keys=$(curl -fsSL --connect-timeout 5 --max-time 20 "$GITHUB_META_URL" | jq -r '.ssh_keys[]'); then
+      [[ -n "$keys" ]] && break
+    fi
+    keys=""
+    [[ "$attempt" -lt 3 ]] && sleep "$retry_sleep"
+  done
+  if [[ -z "$keys" ]]; then
+    if [[ -n "$present" ]]; then
+      warn "Could not refresh github.com host keys from $GITHUB_META_URL — keeping existing known_hosts entries"
+      return 0
+    fi
+    die "Failed to fetch github.com host keys from $GITHUB_META_URL"
+  fi
+
+  local key added=0
   while IFS= read -r key; do
     [[ -n "$key" ]] || continue
     # `ssh-keygen -F` prints matching entries as "<host> <type> <base64>".
@@ -477,8 +494,31 @@ preflight() {
   die "Missing required tools: ${missing[*]} — install them with your package manager (e.g. apt/dnf/pacman/brew: curl, jq, git, openssh)"
 }
 
+# True when this machine already has a usable GitHub SSH key on disk and wired
+# in ssh config + known_hosts — no Bitwarden unlock needed to stay git-ready.
+# Set BASELINE_ACCESS_FORCE_BW=1 to always re-fetch the key from Bitwarden.
+already_git_ready() {
+  [[ "${BASELINE_ACCESS_FORCE_BW:-}" == "1" ]] && return 1
+  [[ -s "$GITHUB_KEY_FILE" ]] || return 1
+  ssh_config_has_github || return 1
+  [[ -f "$HOME/.ssh/known_hosts" ]] || return 1
+  ssh-keygen -F github.com -f "$HOME/.ssh/known_hosts" >/dev/null 2>&1 || return 1
+  return 0
+}
+
 cmd_provision() {
   preflight
+  if already_git_ready; then
+    header "GitHub SSH Key"
+    ok "Already git-ready ($GITHUB_KEY_FILE present) — skipping Bitwarden unlock"
+    ensure_known_hosts
+    header "Git Identity"
+    configure_git_identity
+    header "Verify"
+    verify_github_auth || true
+    print_next_step
+    return 0
+  fi
   bw_login_or_unlock
   header "GitHub SSH Key"
   save_github_key

@@ -79,6 +79,38 @@ provision_mocks() {
   assert_output --partial "Machine is git-ready"
 }
 
+@test "provision: skips Bitwarden when already git-ready" {
+  provision_mocks
+  # ssh -G must report our key (provision_mocks defaults to mode=none).
+  mock_ssh direct authed
+  mkdir -p "$HOME/.ssh"
+  printf 'fake-key\n' > "$HOME/.ssh/svc-github.com"
+  chmod 600 "$HOME/.ssh/svc-github.com"
+  printf 'github.com %s\n' "$GH_ED25519" > "$HOME/.ssh/known_hosts"
+  run bash "$BOOTSTRAP" provision
+  assert_success
+  assert_output --partial "Already git-ready"
+  assert_output --partial "skipping Bitwarden unlock"
+  refute_output --partial "Bitwarden Login"
+  refute_output --partial "BW_SESSION exported"
+  assert_output --partial "Machine is git-ready"
+}
+
+@test "provision: BASELINE_ACCESS_FORCE_BW=1 still unlocks when git-ready" {
+  provision_mocks
+  mock_ssh direct authed
+  mkdir -p "$HOME/.ssh"
+  printf 'fake-key\n' > "$HOME/.ssh/svc-github.com"
+  chmod 600 "$HOME/.ssh/svc-github.com"
+  printf 'github.com %s\n' "$GH_ED25519" > "$HOME/.ssh/known_hosts"
+  export BASELINE_ACCESS_FORCE_BW=1
+  run bash "$BOOTSTRAP" provision
+  assert_success
+  assert_output --partial "Bitwarden Login"
+  assert_output --partial "BW_SESSION exported"
+  refute_output --partial "skipping Bitwarden unlock"
+}
+
 @test "provision: succeeds overall even when GitHub verify fails" {
   provision_mocks
   mock_ssh none denied

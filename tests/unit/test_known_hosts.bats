@@ -12,6 +12,8 @@ setup() {
   command -v ssh-keygen >/dev/null || skip "ssh-keygen not installed"
   KNOWN="$HOME/.ssh/known_hosts"
   BOTH_KEYS="$GH_ED25519"$'\n'"$GH_ECDSA"
+  # Fail-path retries sleep between attempts; keep unit tests fast.
+  export KNOWN_HOSTS_RETRY_SLEEP=0
 }
 
 @test "ensure_known_hosts: exits 1 when curl absent" {
@@ -94,7 +96,7 @@ setup() {
   grep -qxF "github.com $GH_ECDSA" "$KNOWN"   # existing entries left alone
 }
 
-@test "ensure_known_hosts: dies when the API fetch fails" {
+@test "ensure_known_hosts: dies when the API fetch fails and no keys are pinned yet" {
   mock_github_meta 22 "$BOTH_KEYS"
   run ensure_known_hosts
   assert_failure
@@ -102,9 +104,20 @@ setup() {
   [[ ! -f "$KNOWN" ]]
 }
 
-@test "ensure_known_hosts: dies when the API returns no keys" {
+@test "ensure_known_hosts: dies when the API returns no keys and none are pinned yet" {
   mock_github_meta 0 ""
   run ensure_known_hosts
   assert_failure
-  assert_output --partial "returned no SSH host keys"
+  assert_output --partial "Failed to fetch github.com host keys"
+}
+
+@test "ensure_known_hosts: keeps existing pins when the API fetch fails" {
+  mkdir -p "$HOME/.ssh"
+  printf 'github.com %s\ngithub.com %s\n' "$GH_ED25519" "$GH_ECDSA" > "$KNOWN"
+  mock_github_meta 22 "$BOTH_KEYS"
+  run ensure_known_hosts
+  assert_success
+  assert_output --partial "keeping existing known_hosts"
+  grep -qxF "github.com $GH_ED25519" "$KNOWN"
+  grep -qxF "github.com $GH_ECDSA" "$KNOWN"
 }
