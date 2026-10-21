@@ -59,7 +59,10 @@ workspace context, and the script references nothing outside the repo and `$HOME
 ```
 
 `provision` runs: Bitwarden login → save GitHub key → SSH config + known_hosts →
-git identity → verify → next-step.
+git identity → verify → next-step. If the machine is already git-ready (key file +
+`ssh -G` stanza + pinned `github.com` host keys), Bitwarden is **skipped** unless
+`BASELINE_ACCESS_FORCE_BW=1`. `ensure_known_hosts` retries `api.github.com/meta` and
+keeps existing pins when the API is unreachable.
 
 ## Key design constraints
 
@@ -101,6 +104,11 @@ git identity → verify → next-step.
 - **Host keys from GitHub's API, not keyscan**: `ensure_known_hosts` pins the
   `.ssh_keys` list from `https://api.github.com/meta` (TLS-authenticated) rather
   than `ssh-keyscan`, which trusts whatever answers on port 22. Needs `curl`.
+  Retries a few times; if the API fails but pins already exist, warn and continue.
+- **Already git-ready short-circuit**: re-provision without `BASELINE_ACCESS_FORCE_BW`
+  does not unlock Bitwarden when the GitHub key path is already wired — orchestrators
+  that need `BW_SESSION` for *other* secrets (vault, fleet-add) must unlock separately
+  (baseline-setup's `ensure_bw_for_selection`).
 - **Key file replaced, not truncated**: the key goes to a `mktemp` file (0600)
   renamed over `~/.ssh/svc-github.com`, so a pre-existing wider mode or symlink
   never carries over. The write runs in a subshell whose own EXIT/INT/TERM

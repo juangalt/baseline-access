@@ -45,7 +45,10 @@ cd ~/baseline-access
 > Every clone *after* provisioning should use SSH — see below.
 
 You'll be prompted for Bitwarden (email + master password + 2FA) and, if not
-already set, your git identity. To avoid the identity prompt:
+already set, your git identity — **unless** this machine is already git-ready
+(`~/.ssh/svc-github.com` + `github.com` SSH config + known_hosts pins), in which
+case provision skips Bitwarden and only refreshes host keys / verifies. Force a
+full Bitwarden path with `BASELINE_ACCESS_FORCE_BW=1`. To avoid the identity prompt:
 
 ```bash
 GIT_IDENTITY_NAME="juangalt" \
@@ -180,19 +183,23 @@ this public repo.
 
 ## What it does
 
-1. Checks the [prerequisites](#prerequisites), installs the Bitwarden CLI via
-   brew / npm / snap if absent, then `bw login` / `bw unlock` interactively.
-2. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600,
+1. Checks the [prerequisites](#prerequisites). If already git-ready (key + ssh
+   config + `github.com` known_hosts pins) and `BASELINE_ACCESS_FORCE_BW` is unset,
+   skips Bitwarden, refreshes host keys best-effort, verifies, and exits.
+2. Otherwise installs the Bitwarden CLI via brew / npm / snap if absent, then
+   `bw login` / `bw unlock` interactively (and optionally writes `BW_SESSION` to
+   `BASELINE_ACCESS_SESSION_FILE` for orchestrators).
+3. Fetches the GitHub service key and writes `~/.ssh/svc-github.com` (mode 600,
    replacing any existing file rather than inheriting its permissions).
-3. Ensures the `github.com` stanza in `~/.ssh/config` (with `IdentitiesOnly yes`,
+4. Ensures the `github.com` stanza in `~/.ssh/config` (with `IdentitiesOnly yes`,
    so a different key loaded in ssh-agent can't answer for GitHub first), and
    GitHub's host keys in
    `~/.ssh/known_hosts` — taken from GitHub's API over TLS
    (`https://api.github.com/meta`), not trusted from whatever answers
-   `ssh-keyscan`, and appended only if missing, hashed entries included (safe to
-   re-run).
-4. Configures the global git identity if unset.
-5. Verifies `ssh -T git@github.com`, printing the account it authenticated as,
+   `ssh-keyscan`, appended only if missing (retries; keeps existing pins if the
+   API is down), hashed entries included (safe to re-run).
+5. Configures the global git identity if unset.
+6. Verifies `ssh -T git@github.com`, printing the account it authenticated as,
    and prints the next step.
 
 ## What it does NOT do
